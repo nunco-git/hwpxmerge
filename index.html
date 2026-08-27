@@ -20,10 +20,37 @@
   .cross-link { font-size: 0.82rem; color: #2563eb; text-decoration: none; font-weight: 600; }
   .cross-link:hover { text-decoration: underline; }
 
-  .security-banner { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px; color: #166534; font-size: 0.9rem; line-height: 1.55; margin-bottom: 18px; }
-  .security-banner-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
-  .security-banner strong { font-size: 1rem; color: #15803d; }
-  .security-banner ul { margin: 6px 0 0 0; padding-left: 18px; }
+  .security-banner {
+    background: linear-gradient(180deg, #f0fdf4 0%, #ecfdf5 100%);
+    border: 1px solid #bbf7d0;
+    border-radius: 14px;
+    padding: 16px 18px;
+    color: #166534;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.55;
+    margin-bottom: 18px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04), 0 1px 2px rgba(16, 24, 40, 0.03);
+  }
+  .security-banner-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .security-banner strong { font-size: 1rem; color: #15803d; letter-spacing: -0.2px; }
+
+  .security-features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .security-features li {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(187, 247, 208, 0.7);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 0.83rem;
+  }
+  .security-features .feat-icon {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+    background: #16a34a; color: white; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; box-shadow: 0 2px 4px rgba(22, 163, 74, 0.25);
+  }
+  .security-features strong { display: inline; font-size: 0.83rem; margin: 0; color: #14532d; }
+  .security-features .feat-desc { color: #15803d; font-weight: 700; }
   .btn-reset { padding: 5px 14px; background: white; border: 1.5px solid #ef4444; color: #ef4444; border-radius: 20px; font-size: 0.78rem; font-weight: 700; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: background 0.15s, color 0.15s; }
   .btn-reset:hover { background: #ef4444; color: white; }
   .btn-reset:disabled { border-color: #cbd5e1; color: #94a3b8; cursor: not-allowed; background: white; }
@@ -97,9 +124,9 @@
       <strong>🔒 개인정보 및 문서 보안 100% 보장</strong>
       <button class="btn-reset" id="reset-btn" onclick="resetAll()" disabled>🗑️ 초기화</button>
     </div>
-    <ul>
-      <li><strong>외부 서버 전송 Zero:</strong> 파일 데이터는 외부 서버로 전송되지 않고, 모든 병합 작업이 브라우저 안에서만 처리됩니다.</li>
-      <li><strong>서식 보존:</strong> 폰트·테두리·문단모양·스타일·표 서식을 문서별로 정확히 구분해 유지한 채로 병합합니다.</li>
+    <ul class="security-features">
+      <li><span class="feat-icon">🌐</span><span><strong>외부 서버 전송 ZERO</strong> <span class="feat-desc">: 파일이 외부로 전송되지 않고 브라우저 안에서만 처리</span></span></li>
+      <li><span class="feat-icon">📐</span><span><strong>서식 보존</strong> <span class="feat-desc">: 폰트·테두리·문단모양·표 서식을 문서별로 정확히 유지</span></span></li>
     </ul>
   </div>
 
