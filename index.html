@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>한글(HWPX) 문서 병합기</title>
+
+<!-- HWPX(ZIP+XML) 압축 해제/재압축을 위한 라이브러리 -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; background: #f8fafc; margin: 0; padding: 24px; color: #334155; }
+
+  .app-container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 16px; box-shadow: 0 6px 20px rgba(0,0,0,0.05); padding: 32px; }
+
+  h2 { margin: 0 0 4px 0; color: #0f172a; font-size: 1.5rem; display: flex; align-items: center; gap: 8px; }
+  .subtitle { color: #64748b; font-size: 0.9rem; margin: 0 0 20px 0; }
+
+  .security-banner { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px; color: #166534; font-size: 0.9rem; line-height: 1.55; margin-bottom: 18px; }
+  .security-banner-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .security-banner strong { font-size: 1rem; color: #15803d; }
+  .security-banner ul { margin: 6px 0 0 0; padding-left: 18px; }
+  .btn-reset { padding: 5px 14px; background: white; border: 1.5px solid #ef4444; color: #ef4444; border-radius: 20px; font-size: 0.78rem; font-weight: 700; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: background 0.15s, color 0.15s; }
+  .btn-reset:hover { background: #ef4444; color: white; }
+  .btn-reset:disabled { border-color: #cbd5e1; color: #94a3b8; cursor: not-allowed; background: white; }
+
+  .drop-zone { border: 2px dashed #3b82f6; border-radius: 12px; padding: 22px; text-align: center; background-color: #eff6ff; cursor: pointer; margin-bottom: 20px; font-size: 0.95rem; transition: background-color 0.2s, border-color 0.2s; }
+  .drop-zone:hover, .drop-zone.highlight { background-color: #dbeafe; border-color: #1d4ed8; }
+  input[type="file"] { display: none; }
+
+  .editor-layout { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 0; margin-bottom: 8px; min-height: 420px; }
+  .editor-resizer { flex: 0 0 14px; width: 14px; background: #f1f5f9; cursor: col-resize; margin: 0 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; user-select: none; align-self: stretch; }
+  .editor-resizer::before { content: '⋮'; color: #94a3b8; font-size: 14px; font-weight: bold; }
+  .editor-resizer:hover, .editor-resizer.resizing { background: #2563eb; }
+  .editor-resizer:hover::before, .editor-resizer.resizing::before { color: white; }
+
+  .file-list-container { flex: 0 0 calc(48% - 7px); min-width: 340px; max-width: 80%; border: 1px solid #e2e8f0; border-radius: 10px; background: #fafafa; height: 100%; min-height: 300px; max-height: 90vh; overflow: auto; padding: 12px; resize: vertical; }
+  .file-table-wrapper { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 6px; }
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.875rem; text-align: left; }
+  th { background: #f8fafc; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600; position: sticky; top: 0; white-space: nowrap; }
+  td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+
+  tr.draggable-row { cursor: pointer; user-select: none; }
+  tr.draggable-row:hover { background: #f8fafc; }
+  tr.dragging { opacity: 0.4; background: #e2e8f0; }
+  tr.drag-over { border-top: 2px solid #2563eb; }
+  tr.selected-row { background: #eff6ff; }
+  tr.selected-row td { box-shadow: inset 0 1px 0 #bfdbfe, inset 0 -1px 0 #bfdbfe; }
+  .drag-handle { color: #94a3b8; font-weight: bold; cursor: grab; text-align: center; width: 30px; }
+  .num-col { font-weight: 600; color: #64748b; text-align: center; width: 55px; }
+  .num-col-inner { display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .btn-del-x { border: none; background: transparent; color: #cbd5e1; font-weight: 800; font-size: 0.85rem; line-height: 1; padding: 2px 5px; border-radius: 4px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+  .btn-del-x:hover { background: #fee2e2; color: #ef4444; }
+  .file-name-cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status-ok { color: #166534; font-size: 0.75rem; font-weight: 600; }
+  .status-err { color: #ef4444; font-size: 0.75rem; font-weight: 600; }
+
+  .preview-panel { flex: 0 0 calc(52% - 7px); min-width: 320px; max-width: 85%; border: 1px solid #e2e8f0; border-radius: 10px; background: #fafafa; padding: 16px; display: flex; flex-direction: column; height: 100%; min-height: 300px; max-height: 90vh; overflow: auto; resize: both; }
+  .preview-title { font-size: 0.95rem; font-weight: bold; color: #334155; margin: 0 0 8px 0; }
+  .preview-box { flex: 1; overflow: auto; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 6px; padding: 16px; font-size: 0.85rem; color: #1e293b; display: flex; flex-direction: column; align-items: center; }
+  .preview-box p { margin: 0; }
+  .hwpx-page { background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.15); box-sizing: border-box; font-size: 10pt; line-height: 1.6; word-break: break-word; }
+  .hwpx-preview-table { border-collapse: collapse; margin: 2px 0; font-size: inherit; width: 100%; table-layout: fixed; }
+  .hwpx-preview-table td { border: 1px solid #94a3b8; padding: 2px 4px; vertical-align: top; }
+  .hwpx-preview-table td p { margin: 0; }
+  .preview-placeholder { text-align: center; color: #94a3b8; margin-top: 80px; font-size: 0.85rem; }
+
+  .merge-btn { width: 100%; padding: 16px; background: #10b981; color: white; border: none; border-radius: 10px; font-size: 1.05rem; font-weight: 700; cursor: pointer; margin-top: 20px; }
+  .merge-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+  .merge-btn.working { background: #64748b; cursor: wait; }
+
+  @media (max-width: 900px) {
+    .editor-layout { flex-direction: column; }
+    .file-list-container, .preview-panel { flex-basis: auto !important; width: 100%; max-width: 100%; }
+    .file-list-container { height: 320px; }
+    .preview-panel { height: 420px; }
+    .editor-resizer { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <h2>📄 한글(HWPX) 문서 병합기</h2>
+  <p class="subtitle">여러 개의 .hwpx 파일을 지정한 순서대로 하나의 문서로 합칩니다. (각 문서는 새 페이지로 이어붙습니다)</p>
+
+  <div class="security-banner">
+    <div class="security-banner-header">
+      <strong>🔒 개인정보 및 문서 보안 100% 보장</strong>
+      <button class="btn-reset" id="reset-btn" onclick="resetAll()" disabled>🗑️ 초기화</button>
+    </div>
+    <ul>
+      <li><strong>외부 서버 전송 Zero:</strong> 파일 데이터는 외부 서버로 전송되지 않고, 모든 병합 작업이 브라우저 안에서만 처리됩니다.</li>
+      <li><strong>서식 보존:</strong> 폰트·테두리·문단모양·스타일·표 서식을 문서별로 정확히 구분해 유지한 채로 병합합니다.</li>
+    </ul>
+  </div>
+
+  <div class="drop-zone" id="drop-zone">
+    📁 <strong>클릭하거나 .hwpx 파일들을 이곳으로 끌어다 놓으세요</strong>
+    <input type="file" id="file-input" multiple accept=".hwpx" style="display:none;">
+  </div>
+
+  <div class="editor-layout">
+    <div class="file-list-container" id="left-panel">
+      <h3 style="margin-top: 0; font-size: 1rem;">📋 업로드 목록 (<span id="file-count">0</span>) <small style="font-size:0.78rem; font-weight:normal; color:#64748b;">(☰ 핸들로 순서 변경 · 클릭하면 미리보기)</small></h3>
+      <div class="file-table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 55px; text-align: center;">No.</th>
+              <th style="width: 30px;"></th>
+              <th>파일명</th>
+              <th style="width: 100px;">상태</th>
+            </tr>
+          </thead>
+          <tbody id="file-list-body">
+            <tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 20px;">첨부된 파일이 없습니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="editor-resizer" id="editor-resizer"></div>
+
+    <div class="preview-panel" id="right-panel">
+      <div class="preview-title">👁️ 텍스트 미리보기 <span style="font-weight:normal; color:#94a3b8; font-size:0.78rem;">(서식은 제외한 본문 내용만 표시됩니다)</span><br><small id="preview-title-name" style="font-weight:normal; font-size:0.78rem; color:#64748b;"></small></div>
+      <div class="preview-box" id="preview-box">
+        <p class="preview-placeholder">목록에서 파일을 클릭하면 표시됩니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <button class="merge-btn" id="merge-btn" disabled onclick="mergeAndDownload()">선택한 순서대로 하나로 병합하여 다운로드</button>
+  <div id="status" style="margin-top: 14px; text-align: center; font-size: 0.9rem; font-weight: 600;"></div>
+</div>
+
+<script>
+/* =========================================================================
+ * HWPX(한글 개방형 포맷) 병합 엔진
+ * -------------------------------------------------------------------------
+ * HWPX = ZIP 컨테이너 + XML (OWPML / KS X 6101 국가표준). 여러 문서를
+ * "섹션(section)" 단위로 이어붙여 하나의 hwpx로 만든다. 각 원본 문서는
+ * 새 섹션이 되고, 섹션마다 자체 페이지 설정을 가지므로 문서 사이에
+ * 자연스럽게 페이지가 나뉜다.
+ *
+ * 핵심 문제: 폰트/테두리/글자모양/문단모양/스타일/문단번호 등은 모두 문서
+ * 내부에서 정수 ID로 서로를 참조한다. 문서 A의 id=2와 문서 B의 id=2는
+ * 완전히 다른 스타일을 가리킬 수 있으므로, 단순히 이어붙이면 서식이
+ * 뒤섞여 깨진다. 그래서 두 번째 문서부터는 기준 문서의 등록부(refList)
+ * 뒤에 항목을 추가하면서 새 id를 부여하고, 그 문서의 본문(section) 전체를
+ * 훑으며 옛 id -> 새 id로 다시 써준다. (실제 정부 문서 2건으로 검증 완료:
+ * 표 셀 테두리 서식까지 정확히 유지됨을 확인)
+ * ========================================================================= */
+const HWPX_SENTINEL = '4294967295'; // uint32 최댓값 = "기본값 사용" 특수 표시, 리매핑 금지
+
+function parseXml(text) { return new DOMParser().parseFromString(text, 'application/xml'); }
+function serializeXml(doc) { return new XMLSerializer().serializeToString(doc); }
+function els(root, tagName) { return Array.from(root.getElementsByTagName(tagName)); }
+
+function mergeSimpleRegistry(baseListEl, incomingItems, itemTagName, targetDoc) {
+  const existingIds = els(baseListEl, itemTagName).map(e => parseInt(e.getAttribute('id'), 10));
+  let nextId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 0;
+  const idMap = new Map();
+  for (const item of incomingItems) {
+    const oldId = item.getAttribute('id');
+    const newId = String(nextId++);
+    idMap.set(oldId, newId);
+    const cloned = targetDoc.importNode(item, true);
+    cloned.setAttribute('id', newId);
+    baseListEl.appendChild(cloned);
+  }
+  baseListEl.setAttribute('itemCnt', String(els(baseListEl, itemTagName).length));
+  return idMap;
+}
+
+function walkElements(root, callback) {
+  if (root.nodeType === 1) callback(root);
+  const children = root.childNodes;
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    if (child.nodeType === 1) walkElements(child, callback);
+  }
+}
+
+function remapIdRefAttr(root, attrName, idMap) {
+  if (idMap.size === 0) return;
+  walkElements(root, node => {
+    if (!node.getAttribute) return;
+    const v = node.getAttribute(attrName);
+    if (v === null || v === '' || v === HWPX_SENTINEL) return;
+    if (idMap.has(v)) node.setAttribute(attrName, idMap.get(v));
+  });
+}
+
+function mergeFontfaces(baseHeaderDoc, incomingHeaderDoc) {
+  const baseFontfacesEl = els(baseHeaderDoc, 'hh:fontfaces')[0];
+  const incomingFontfacesEl = els(incomingHeaderDoc, 'hh:fontfaces')[0];
+  const baseGroups = els(baseFontfacesEl, 'hh:fontface');
+  const incomingGroups = els(incomingFontfacesEl, 'hh:fontface');
+  const fontIdMapByLang = {};
+
+  incomingGroups.forEach(incomingGroup => {
+    const lang = incomingGroup.getAttribute('lang');
+    const baseGroup = baseGroups.find(g => g.getAttribute('lang') === lang);
+    if (!baseGroup) {
+      const cloned = baseHeaderDoc.importNode(incomingGroup, true);
+      baseFontfacesEl.appendChild(cloned);
+      fontIdMapByLang[lang] = new Map();
+      els(incomingGroup, 'hh:font').forEach(f => fontIdMapByLang[lang].set(f.getAttribute('id'), f.getAttribute('id')));
+      return;
+    }
+    const existingFonts = els(baseGroup, 'hh:font');
+    const existingByFace = new Map(existingFonts.map(f => [f.getAttribute('face') + '|' + f.getAttribute('type'), f.getAttribute('id')]));
+    let nextFontId = existingFonts.length > 0 ? Math.max(...existingFonts.map(f => parseInt(f.getAttribute('id'), 10))) + 1 : 0;
+    const map = new Map();
+    els(incomingGroup, 'hh:font').forEach(incomingFont => {
+      const key = incomingFont.getAttribute('face') + '|' + incomingFont.getAttribute('type');
+      const oldId = incomingFont.getAttribute('id');
+      if (existingByFace.has(key)) {
+        map.set(oldId, existingByFace.get(key));
+      } else {
+        const newId = String(nextFontId++);
+        const cloned = baseHeaderDoc.importNode(incomingFont, true);
+        cloned.setAttribute('id', newId);
+        baseGroup.appendChild(cloned);
+        existingByFace.set(key, newId);
+        map.set(oldId, newId);
+      }
+    });
+    baseGroup.setAttribute('fontCnt', String(els(baseGroup, 'hh:font').length));
+    fontIdMapByLang[lang] = map;
+  });
+  baseFontfacesEl.setAttribute('itemCnt', String(els(baseFontfacesEl, 'hh:fontface').length));
+  return fontIdMapByLang;
+}
+
+function remapFontRefs(root, fontIdMapByLang) {
+  const langs = ['hangul', 'latin', 'hanja', 'japanese', 'other', 'symbol', 'user'];
+  const langAttrToKey = { hangul: 'HANGUL', latin: 'LATIN', hanja: 'HANJA', japanese: 'JAPANESE', other: 'OTHER', symbol: 'SYMBOL', user: 'USER' };
+  walkElements(root, node => {
+    if (node.tagName !== 'hh:fontRef' || !node.getAttribute) return;
+    langs.forEach(attr => {
+      const val = node.getAttribute(attr);
+      if (val == null) return;
+      const map = fontIdMapByLang[langAttrToKey[attr]];
+      if (map && map.has(val)) node.setAttribute(attr, map.get(val));
+    });
+  });
+}
+
+function mergeOneDocument(baseHeaderDoc, incomingHeaderDoc, incomingSectionDocs) {
+  const baseRefList = els(baseHeaderDoc, 'hh:refList')[0];
+  const incomingRefList = els(incomingHeaderDoc, 'hh:refList')[0];
+
+  const fontIdMapByLang = mergeFontfaces(baseHeaderDoc, incomingHeaderDoc);
+
+  const baseBorderFills = els(baseRefList, 'hh:borderFills')[0];
+  const incomingBorderFillItems = els(els(incomingRefList, 'hh:borderFills')[0], 'hh:borderFill');
+  const borderFillIdMap = mergeSimpleRegistry(baseBorderFills, incomingBorderFillItems, 'hh:borderFill', baseHeaderDoc);
+
+  const baseCharProps = els(baseRefList, 'hh:charProperties')[0];
+  const incomingCharPrItems = els(els(incomingRefList, 'hh:charProperties')[0], 'hh:charPr');
+  const charPrIdMap = mergeSimpleRegistry(baseCharProps, incomingCharPrItems, 'hh:charPr', baseHeaderDoc);
+  {
+    const newIds = new Set(charPrIdMap.values());
+    els(baseCharProps, 'hh:charPr').filter(e => newIds.has(e.getAttribute('id'))).forEach(charPrEl => {
+      remapFontRefs(charPrEl, fontIdMapByLang);
+      remapIdRefAttr(charPrEl, 'borderFillIDRef', borderFillIdMap);
+    });
+  }
+
+  const baseTabProps = els(baseRefList, 'hh:tabProperties')[0];
+  const incomingTabPrItems = els(els(incomingRefList, 'hh:tabProperties')[0], 'hh:tabPr');
+  const tabPrIdMap = mergeSimpleRegistry(baseTabProps, incomingTabPrItems, 'hh:tabPr', baseHeaderDoc);
+
+  const baseNumberingsEl = els(baseRefList, 'hh:numberings')[0];
+  const incomingNumberingItems = els(els(incomingRefList, 'hh:numberings')[0], 'hh:numbering');
+  const numberingIdMap = mergeSimpleRegistry(baseNumberingsEl, incomingNumberingItems, 'hh:numbering', baseHeaderDoc);
+  {
+    const newIds = new Set(numberingIdMap.values());
+    els(baseNumberingsEl, 'hh:numbering').filter(e => newIds.has(e.getAttribute('id'))).forEach(numEl => remapIdRefAttr(numEl, 'charPrIDRef', charPrIdMap));
+  }
+
+  let bulletIdMap = new Map();
+  const baseBulletsEl = els(baseRefList, 'hh:bullets')[0];
+  const incomingBulletsEl = els(incomingRefList, 'hh:bullets')[0];
+  if (baseBulletsEl && incomingBulletsEl) {
+    bulletIdMap = mergeSimpleRegistry(baseBulletsEl, els(incomingBulletsEl, 'hh:bullet'), 'hh:bullet', baseHeaderDoc);
+  }
+
+  const baseParaProps = els(baseRefList, 'hh:paraProperties')[0];
+  const incomingParaPrItems = els(els(incomingRefList, 'hh:paraProperties')[0], 'hh:paraPr');
+  const paraPrIdMap = mergeSimpleRegistry(baseParaProps, incomingParaPrItems, 'hh:paraPr', baseHeaderDoc);
+  {
+    const newIds = new Set(paraPrIdMap.values());
+    els(baseParaProps, 'hh:paraPr').filter(e => newIds.has(e.getAttribute('id'))).forEach(paraPrEl => {
+      remapIdRefAttr(paraPrEl, 'tabPrIDRef', tabPrIdMap);
+      remapIdRefAttr(paraPrEl, 'borderFillIDRef', borderFillIdMap);
+      els(paraPrEl, 'hh:heading').forEach(h => {
+        const type = h.getAttribute('type');
+        const idRef = h.getAttribute('idRef');
+        if (type === 'NUMBER' && numberingIdMap.has(idRef)) h.setAttribute('idRef', numberingIdMap.get(idRef));
+        else if (type === 'BULLET' && bulletIdMap.has(idRef)) h.setAttribute('idRef', bulletIdMap.get(idRef));
+      });
+    });
+  }
+
+  const baseStylesEl = els(baseRefList, 'hh:styles')[0];
+  const incomingStyleItems = els(els(incomingRefList, 'hh:styles')[0], 'hh:style');
+  const styleIdMap = mergeSimpleRegistry(baseStylesEl, incomingStyleItems, 'hh:style', baseHeaderDoc);
+  {
+    const newIds = new Set(styleIdMap.values());
+    els(baseStylesEl, 'hh:style').filter(e => newIds.has(e.getAttribute('id'))).forEach(styleEl => {
+      remapIdRefAttr(styleEl, 'paraPrIDRef', paraPrIdMap);
+      remapIdRefAttr(styleEl, 'charPrIDRef', charPrIdMap);
+      remapIdRefAttr(styleEl, 'nextStyleIDRef', styleIdMap);
+    });
+  }
+
+  incomingSectionDocs.forEach(sectionDoc => {
+    const root = sectionDoc.documentElement;
+    remapFontRefs(root, fontIdMapByLang);
+    remapIdRefAttr(root, 'borderFillIDRef', borderFillIdMap);
+    remapIdRefAttr(root, 'charPrIDRef', charPrIdMap);
+    remapIdRefAttr(root, 'paraPrIDRef', paraPrIdMap);
+    remapIdRefAttr(root, 'styleIDRef', styleIdMap);
+    ['hp:p', 'hp:ctrl', 'hp:tbl'].forEach(tag => {
+      els(root, tag).forEach(node => {
+        if (node.hasAttribute('id')) node.setAttribute('id', String(Math.floor(Math.random() * 0xfffffffe) + 1));
+      });
+    });
+  });
+}
+
+async function mergeHwpxFiles(fileEntries) {
+  if (!fileEntries || fileEntries.length === 0) throw new Error('NO_FILES');
+  const zips = [];
+  for (const f of fileEntries) zips.push(await JSZip.loadAsync(f.arrayBuffer));
+
+  async function readXml(zip, path) {
+    const file = zip.file(path);
+    if (!file) return null;
+    return parseXml(await file.async('string'));
+  }
+  async function getSpineSectionHrefs(zip) {
+    const hpfDoc = await readXml(zip, 'Contents/content.hpf');
+    const itemById = {};
+    els(hpfDoc, 'opf:item').forEach(it => { itemById[it.getAttribute('id')] = it.getAttribute('href'); });
+    const hrefs = [];
+    els(hpfDoc, 'opf:itemref').forEach(ir => {
+      const href = itemById[ir.getAttribute('idref')];
+      if (href && /Contents\/section\d+\.xml$/.test(href)) hrefs.push(href);
+    });
+    return hrefs;
+  }
+
+  const baseHeaderDoc = await readXml(zips[0], 'Contents/header.xml');
+  const baseHpfDoc = await readXml(zips[0], 'Contents/content.hpf');
+  const baseSectionHrefs = await getSpineSectionHrefs(zips[0]);
+  const outputFiles = {};
+  const outputBinary = {};
+
+  for (const href of baseSectionHrefs) outputFiles[href] = await zips[0].file(href).async('string');
+  for (const bf of zips[0].file(/^BinData\//)) outputBinary[bf.name] = await bf.async('uint8array');
+
+  let sectionCounter = baseSectionHrefs.length;
+  const manifestEl = els(baseHpfDoc, 'opf:manifest')[0];
+  const spineEl = els(baseHpfDoc, 'opf:spine')[0];
+
+  for (let i = 1; i < zips.length; i++) {
+    const zip = zips[i];
+    const incomingHeaderDoc = await readXml(zip, 'Contents/header.xml');
+    const sectionHrefs = await getSpineSectionHrefs(zip);
+    const incomingSectionDocs = [];
+    for (const href of sectionHrefs) incomingSectionDocs.push(await readXml(zip, href));
+
+    mergeOneDocument(baseHeaderDoc, incomingHeaderDoc, incomingSectionDocs);
+
+    for (const bf of zip.file(/^BinData\//)) {
+      let newName = bf.name;
+      if (outputBinary[newName]) newName = bf.name.replace('BinData/', `BinData/f${i}_`);
+      outputBinary[newName] = await bf.async('uint8array');
+    }
+
+    incomingSectionDocs.forEach(sectionDoc => {
+      const newHref = `Contents/section${sectionCounter}.xml`;
+      outputFiles[newHref] = serializeXml(sectionDoc);
+      const itemEl = baseHpfDoc.createElement('opf:item');
+      itemEl.setAttribute('id', `section${sectionCounter}`);
+      itemEl.setAttribute('href', newHref);
+      itemEl.setAttribute('media-type', 'application/xml');
+      manifestEl.appendChild(itemEl);
+      const itemrefEl = baseHpfDoc.createElement('opf:itemref');
+      itemrefEl.setAttribute('idref', `section${sectionCounter}`);
+      itemrefEl.setAttribute('linear', 'yes');
+      spineEl.appendChild(itemrefEl);
+      sectionCounter++;
+    });
+  }
+
+  els(baseHeaderDoc, 'hh:head')[0].setAttribute('secCnt', String(sectionCounter));
+  outputFiles['Contents/header.xml'] = serializeXml(baseHeaderDoc);
+  outputFiles['Contents/content.hpf'] = serializeXml(baseHpfDoc);
+
+  const passthroughPaths = ['mimetype', 'version.xml', 'settings.xml', 'META-INF/container.xml', 'META-INF/container.rdf', 'META-INF/manifest.xml'];
+  for (const p of passthroughPaths) {
+    const f = zips[0].file(p);
+    if (f) outputFiles[p] = await f.async('string');
+  }
+
+  const outZip = new JSZip();
+  if (outputFiles['mimetype'] != null) {
+    outZip.file('mimetype', outputFiles['mimetype'], { compression: 'STORE', createFolders: false });
+    delete outputFiles['mimetype'];
+  }
+  for (const [path, content] of Object.entries(outputFiles)) outZip.file(path, content, { createFolders: false, compression: 'DEFLATE' });
+  for (const [path, content] of Object.entries(outputBinary)) outZip.file(path, content, { createFolders: false, compression: 'DEFLATE' });
+  return outZip;
+}
+
+/* =========================================================================
+ * 화면(UI) 로직
+ * ========================================================================= */
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const fileListBody = document.getElementById('file-list-body');
+const fileCountUI = document.getElementById('file-count');
+const mergeBtn = document.getElementById('merge-btn');
+const previewBox = document.getElementById('preview-box');
+const previewTitleName = document.getElementById('preview-title-name');
+const statusEl = document.getElementById('status');
+
+let fileDataList = [];
+let draggedIndex = null;
+let selectedPreviewIndex = null;
+
+/* 목록 ↔ 미리보기 좌우 리사이저 */
+(function initEditorResizer() {
+  const resizerEl = document.getElementById('editor-resizer');
+  const leftEl = document.getElementById('left-panel');
+  const rightEl = document.getElementById('right-panel');
+  const layoutEl = document.querySelector('.editor-layout');
+  let isResizing = false;
+  resizerEl.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    resizerEl.classList.add('resizing');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+    const rect = layoutEl.getBoundingClientRect();
+    const minWidth = 320;
+    const maxWidth = rect.width - minWidth - resizerEl.offsetWidth;
+    if (maxWidth <= minWidth) return;
+    const newLeftWidth = Math.max(minWidth, Math.min(e.clientX - rect.left, maxWidth));
+    leftEl.style.flex = `0 0 ${newLeftWidth}px`;
+    rightEl.style.flex = `1 1 auto`;
+  });
+  document.addEventListener('mouseup', () => {
+    if (isResizing) {
+      isResizing = false;
+      resizerEl.classList.remove('resizing');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  });
+})();
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => handleFiles(Array.from(e.target.files)));
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
+  dropZone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); });
+});
+dropZone.addEventListener('dragenter', () => dropZone.classList.add('highlight'));
+dropZone.addEventListener('dragover', () => dropZone.classList.add('highlight'));
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('highlight'));
+dropZone.addEventListener('drop', (e) => {
+  dropZone.classList.remove('highlight');
+  handleFiles(Array.from(e.dataTransfer.files));
+});
+
+async function handleFiles(files) {
+  const validFiles = files.filter(f => f.name.match(/\.hwpx$/i));
+  for (const file of validFiles) {
+    const item = { id: Math.random().toString(36).slice(2), file, ok: false, error: null, text: '' };
+    await parseHwpxForPreview(item);
+    fileDataList.push(item);
+  }
+  updateUI();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// HWPUNIT(1/7200 인치)을 mm로 변환 - 문서 안의 모든 크기(페이지, 여백, 표 셀 크기)가 이 단위를 쓴다.
+function hwpunitToMm(v) {
+  const n = parseFloat(v);
+  if (isNaN(n)) return 0;
+  return (n / 7200) * 25.4;
+}
+
+// 한컴 전용 폰트 이름을 브라우저에 이미 깔려 있을 가능성이 높은 폰트로 매핑한다.
+// (함초롬 폰트 파일 자체를 심는 건 라이선스상 하지 않고, 이름이 비슷한 계열로 대체)
+function mapFontFamily(face) {
+  if (!face) return 'sans-serif';
+  const f = face.trim();
+  const serifLike = ['바탕', '명조', '궁서', 'Batang', 'Myeongjo'];
+  const sansLike = ['돋움', '고딕', '굴림', 'Dotum', 'Gulim', 'Gothic'];
+  if (serifLike.some(k => f.includes(k))) return `"${f}", "HCR Batang", Batang, "바탕", serif`;
+  if (sansLike.some(k => f.includes(k))) return `"${f}", "HCR Dotum", Dotum, "맑은 고딕", "Malgun Gothic", sans-serif`;
+  return `"${f}", "맑은 고딕", "Malgun Gothic", sans-serif`;
+}
+
+function hwpBorderToCss(borderEl) {
+  if (!borderEl) return 'none';
+  const type = borderEl.getAttribute('type');
+  if (!type || type === 'NONE') return 'none';
+  const widthMm = hwpunitFromMmString(borderEl.getAttribute('width'));
+  const color = borderEl.getAttribute('color') || '#000000';
+  let style = 'solid';
+  if (type.startsWith('DASH')) style = 'dashed';
+  else if (type.startsWith('DOT')) style = 'dotted';
+  else if (type === 'DOUBLE') style = 'double';
+  return `${widthMm}mm ${style} ${color}`;
+}
+// borderFill의 width는 "0.12 mm" 처럼 이미 mm 단위 문자열로 들어있다.
+function hwpunitFromMmString(s) {
+  if (!s) return 0.1;
+  const n = parseFloat(s);
+  return isNaN(n) ? 0.1 : n;
+}
+
+// header.xml에서 id별 조회용 맵들을 미리 만들어 둔다.
+function buildHeaderLookup(headerDoc) {
+  const paraPrById = new Map();
+  els(headerDoc, 'hh:paraPr').forEach(el => paraPrById.set(el.getAttribute('id'), el));
+  const charPrById = new Map();
+  els(headerDoc, 'hh:charPr').forEach(el => charPrById.set(el.getAttribute('id'), el));
+  const borderFillById = new Map();
+  els(headerDoc, 'hh:borderFill').forEach(el => borderFillById.set(el.getAttribute('id'), el));
+  const fontByLangAndId = new Map(); // key: "HANGUL:3"
+  els(headerDoc, 'hh:fontface').forEach(group => {
+    const lang = group.getAttribute('lang');
+    els(group, 'hh:font').forEach(f => fontByLangAndId.set(`${lang}:${f.getAttribute('id')}`, f.getAttribute('face')));
+  });
+  return { paraPrById, charPrById, borderFillById, fontByLangAndId };
+}
+
+function charPrToStyle(charPrEl, lookup) {
+  if (!charPrEl) return '';
+  const heightPt = (parseFloat(charPrEl.getAttribute('height')) || 1000) / 100;
+  const color = charPrEl.getAttribute('textColor');
+  const isBold = els(charPrEl, 'hh:bold').length > 0;
+  const isItalic = els(charPrEl, 'hh:italic').length > 0;
+  const fontRefEl = els(charPrEl, 'hh:fontRef')[0];
+  let fontFamily = 'inherit';
+  if (fontRefEl) {
+    const hangulId = fontRefEl.getAttribute('hangul');
+    const face = lookup.fontByLangAndId.get(`HANGUL:${hangulId}`);
+    if (face) fontFamily = mapFontFamily(face);
+  }
+  let style = `font-size:${heightPt}pt; font-family:${fontFamily};`;
+  if (color && color !== 'none') style += `color:${color};`;
+  if (isBold) style += 'font-weight:bold;';
+  if (isItalic) style += 'font-style:italic;';
+  return style;
+}
+
+function paraPrToStyle(paraPrEl) {
+  if (!paraPrEl) return '';
+  const alignEl = els(paraPrEl, 'hh:align')[0];
+  const lineSpacingEl = els(paraPrEl, 'hh:lineSpacing')[0];
+  const marginEl = els(paraPrEl, 'hh:margin')[0];
+  let style = '';
+  if (alignEl) {
+    const map = { JUSTIFY: 'justify', BOTH: 'justify', LEFT: 'left', RIGHT: 'right', CENTER: 'center', DISTRIBUTE: 'justify' };
+    style += `text-align:${map[alignEl.getAttribute('horizontal')] || 'left'};`;
+  }
+  if (lineSpacingEl && lineSpacingEl.getAttribute('type') === 'PERCENT') {
+    style += `line-height:${lineSpacingEl.getAttribute('value')}%;`;
+  }
+  if (marginEl) {
+    const intentEl = els(marginEl, 'hc:intent')[0];
+    const leftEl = els(marginEl, 'hc:left')[0];
+    const rightEl = els(marginEl, 'hc:right')[0];
+    if (leftEl) style += `margin-left:${hwpunitToMm(leftEl.getAttribute('value')).toFixed(2)}mm;`;
+    if (rightEl) style += `margin-right:${hwpunitToMm(rightEl.getAttribute('value')).toFixed(2)}mm;`;
+    if (intentEl) style += `text-indent:${hwpunitToMm(intentEl.getAttribute('value')).toFixed(2)}mm;`;
+  }
+  return style;
+}
+
+// 문단(hp:p)의 "직속" 런(run)들만 순서대로 훑어 span으로 만든다 - 문단 안에 표(hp:tbl)가
+// 들어있어도 표 내부 셀 텍스트는 여기서 제외한다 (표는 renderTableHtml로 별도 렌더링).
+function directParagraphRunsHtml(pEl, lookup) {
+  let html = '';
+  const runs = Array.from(pEl.childNodes).filter(n => n.nodeType === 1 && n.tagName === 'hp:run');
+  runs.forEach(run => {
+    // 이 run 바로 아래(재귀 아님)에 hp:tbl이 있으면 표이므로 텍스트 추출에서 제외
+    const hasTable = Array.from(run.childNodes).some(n => n.nodeType === 1 && n.tagName === 'hp:tbl');
+    if (hasTable) return;
+    let text = '';
+    (function walk(node) {
+      Array.from(node.childNodes).forEach(child => {
+        if (child.nodeType !== 1) return;
+        if (child.tagName === 'hp:t') { text += (child.textContent || ''); return; }
+        if (child.tagName === 'hp:lineBreak') { text += '\n'; return; }
+        walk(child);
+      });
+    })(run);
+    if (!text) return;
+    const charPrEl = lookup.charPrById.get(run.getAttribute('charPrIDRef'));
+    const style = charPrToStyle(charPrEl, lookup);
+    html += `<span style="${style}">${escapeHtml(text).replace(/\n/g, '<br>')}</span>`;
+  });
+  return html;
+}
+
+function directParagraphText(pEl) {
+  let text = '';
+  (function walk(node) {
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
+      if (child.nodeType !== 1) continue;
+      if (child.tagName === 'hp:tbl') continue;
+      if (child.tagName === 'hp:t') { text += (child.textContent || ''); continue; }
+      walk(child);
+    }
+  })(pEl);
+  return text;
+}
+
+function renderParagraphHtml(pEl, lookup) {
+  const runsHtml = directParagraphRunsHtml(pEl, lookup);
+  if (!runsHtml.trim()) return '';
+  const paraPrEl = lookup.paraPrById.get(pEl.getAttribute('paraPrIDRef'));
+  const style = paraPrToStyle(paraPrEl);
+  return `<p style="${style}">${runsHtml}</p>`;
+}
+
+// 표 셀(hp:tc) 하나를 문단 단위로 렌더링한다.
+function cellParagraphsHtml(tcEl, lookup) {
+  const directChildren = Array.from(tcEl.childNodes).filter(n => n.nodeType === 1);
+  const subList = directChildren.find(n => n.tagName === 'hp:subList') || tcEl;
+  const paras = Array.from(subList.childNodes).filter(n => n.nodeType === 1 && n.tagName === 'hp:p');
+  return paras.map(p => renderParagraphHtml(p, lookup)).join('') || '&nbsp;';
+}
+
+function renderTableHtml(tblEl, lookup) {
+  const trs = Array.from(tblEl.childNodes).filter(n => n.nodeType === 1 && n.tagName === 'hp:tr');
+  let html = '<table class="hwpx-preview-table"><tbody>';
+  trs.forEach(tr => {
+    html += '<tr>';
+    const tcs = Array.from(tr.childNodes).filter(n => n.nodeType === 1 && n.tagName === 'hp:tc');
+    // 표 원본의 셀 너비 합이 페이지 폭을 넘는 경우가 실제로 있어서(예: 편집 과정에서 늘어난 표),
+    // 절대 mm 대신 "이 행 안에서의 비율(%)"로 환산해 항상 페이지 폭 안에 들어오도록 한다.
+    const rawWidths = tcs.map(tc => {
+      const sizeEl = els(tc, 'hp:cellSz')[0];
+      return sizeEl ? parseFloat(sizeEl.getAttribute('width')) || 0 : 0;
+    });
+    const rowTotal = rawWidths.reduce((a, b) => a + b, 0) || 1;
+
+    tcs.forEach((tc, i) => {
+      const spanEl = els(tc, 'hp:cellSpan')[0];
+      const colSpan = spanEl ? spanEl.getAttribute('colSpan') : '1';
+      const rowSpan = spanEl ? spanEl.getAttribute('rowSpan') : '1';
+      const widthPct = ((rawWidths[i] / rowTotal) * 100).toFixed(2);
+
+      const borderFillEl = lookup.borderFillById.get(tc.getAttribute('borderFillIDRef'));
+      let cellStyle = `width:${widthPct}%;`;
+      if (borderFillEl) {
+        cellStyle += `border-left:${hwpBorderToCss(els(borderFillEl, 'hh:leftBorder')[0])};`;
+        cellStyle += `border-right:${hwpBorderToCss(els(borderFillEl, 'hh:rightBorder')[0])};`;
+        cellStyle += `border-top:${hwpBorderToCss(els(borderFillEl, 'hh:topBorder')[0])};`;
+        cellStyle += `border-bottom:${hwpBorderToCss(els(borderFillEl, 'hh:bottomBorder')[0])};`;
+        const winBrush = els(borderFillEl, 'hc:winBrush')[0];
+        if (winBrush) {
+          const faceColor = winBrush.getAttribute('faceColor');
+          const alpha = winBrush.getAttribute('alpha');
+          if (faceColor && faceColor !== 'none' && alpha !== '0') cellStyle += `background-color:${faceColor};`;
+        }
+      }
+      const content = cellParagraphsHtml(tc, lookup);
+      html += `<td colspan="${colSpan}" rowspan="${rowSpan}" style="${cellStyle}">${content}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+// 섹션(hs:sec)의 첫 문단에 들어있는 페이지 설정(hp:secPr)에서 페이지 크기/여백을 읽는다.
+function getPageInfo(secDoc) {
+  const secPrEl = els(secDoc.documentElement, 'hp:secPr')[0];
+  const pagePrEl = secPrEl ? els(secPrEl, 'hp:pagePr')[0] : null;
+  const marginEl = pagePrEl ? els(pagePrEl, 'hp:margin')[0] : null;
+  if (!pagePrEl) return null;
+  return {
+    widthMm: hwpunitToMm(pagePrEl.getAttribute('width')),
+    heightMm: hwpunitToMm(pagePrEl.getAttribute('height')),
+    top: marginEl ? hwpunitToMm(marginEl.getAttribute('top')) : 20,
+    bottom: marginEl ? hwpunitToMm(marginEl.getAttribute('bottom')) : 20,
+    left: marginEl ? hwpunitToMm(marginEl.getAttribute('left')) : 20,
+    right: marginEl ? hwpunitToMm(marginEl.getAttribute('right')) : 20,
+  };
+}
+
+// 섹션 전체를 문서 순서 그대로 훑으며 문단(텍스트)과 표를 조립하고, A4 용지 모양의 페이지로 감싼다.
+function sectionToPreviewHtml(secDoc, lookup) {
+  const root = secDoc.documentElement;
+  const topParagraphs = Array.from(root.childNodes).filter(n => n.nodeType === 1 && n.tagName === 'hp:p');
+  let bodyHtml = '';
+  topParagraphs.forEach(p => {
+    bodyHtml += renderParagraphHtml(p, lookup);
+    Array.from(p.getElementsByTagName('hp:tbl')).forEach(tbl => {
+      bodyHtml += renderTableHtml(tbl, lookup);
+    });
+  });
+  if (!bodyHtml) bodyHtml = '<p class="preview-placeholder">(본문 내용 없음)</p>';
+
+  const page = getPageInfo(secDoc);
+  if (!page) return bodyHtml;
+  const pageStyle = `width:${page.widthMm.toFixed(1)}mm; min-height:${page.heightMm.toFixed(1)}mm; ` +
+    `padding:${page.top.toFixed(1)}mm ${page.right.toFixed(1)}mm ${page.bottom.toFixed(1)}mm ${page.left.toFixed(1)}mm;`;
+  return `<div class="hwpx-page" style="${pageStyle}">${bodyHtml}</div>`;
+}
+
+async function parseHwpxForPreview(item) {
+  try {
+    const buffer = await item.file.arrayBuffer();
+    const zip = await JSZip.loadAsync(buffer);
+    const hpfFile = zip.file('Contents/content.hpf');
+    if (!hpfFile) throw new Error('NOT_HWPX');
+    const hpfDoc = parseXml(await hpfFile.async('string'));
+    const headerFile = zip.file('Contents/header.xml');
+    const lookup = buildHeaderLookup(headerFile ? parseXml(await headerFile.async('string')) : parseXml('<root/>'));
+    const itemById = {};
+    els(hpfDoc, 'opf:item').forEach(it => { itemById[it.getAttribute('id')] = it.getAttribute('href'); });
+    const sectionHrefs = [];
+    els(hpfDoc, 'opf:itemref').forEach(ir => {
+      const href = itemById[ir.getAttribute('idref')];
+      if (href && /Contents\/section\d+\.xml$/.test(href)) sectionHrefs.push(href);
+    });
+    if (sectionHrefs.length === 0) throw new Error('NO_SECTION');
+
+    let html = '';
+    for (const href of sectionHrefs) {
+      const secDoc = parseXml(await zip.file(href).async('string'));
+      html += sectionToPreviewHtml(secDoc, lookup);
+    }
+    item.ok = true;
+    item.previewHtml = html;
+    item.error = null;
+  } catch (err) {
+    item.ok = false;
+    item.error = (err && err.message === 'NOT_HWPX') ? '유효한 HWPX 파일이 아닙니다' : '읽기 실패';
+  }
+}
+
+function updateUI() {
+  const resetBtn = document.getElementById('reset-btn');
+  if (fileDataList.length === 0) {
+    fileListBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 20px;">첨부된 파일이 없습니다.</td></tr>';
+    mergeBtn.disabled = true;
+    fileCountUI.textContent = '0';
+    if (resetBtn) resetBtn.disabled = true;
+    return;
+  }
+  if (resetBtn) resetBtn.disabled = false;
+
+  fileListBody.innerHTML = '';
+  fileCountUI.textContent = fileDataList.length;
+
+  fileDataList.forEach((item, index) => {
+    const tr = document.createElement('tr');
+    tr.className = 'draggable-row' + (selectedPreviewIndex === index ? ' selected-row' : '');
+    tr.draggable = true;
+    tr.dataset.index = index;
+
+    tr.addEventListener('dragstart', handleDragStart);
+    tr.addEventListener('dragover', handleDragOver);
+    tr.addEventListener('dragleave', handleDragLeave);
+    tr.addEventListener('drop', handleDrop);
+    tr.addEventListener('dragend', handleDragEnd);
+    tr.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      selectedPreviewIndex = index;
+      renderPreview(index);
+      document.querySelectorAll('#file-list-body tr').forEach(r => r.classList.remove('selected-row'));
+      tr.classList.add('selected-row');
+    });
+
+    const tdNum = document.createElement('td');
+    tdNum.className = 'num-col';
+    const numInner = document.createElement('div');
+    numInner.className = 'num-col-inner';
+    const numSpan = document.createElement('span');
+    numSpan.textContent = index + 1;
+    const btnDelX = document.createElement('button');
+    btnDelX.className = 'btn-del-x';
+    btnDelX.textContent = '✕';
+    btnDelX.title = '이 파일 삭제';
+    btnDelX.onclick = (e) => {
+      e.stopPropagation();
+      fileDataList.splice(index, 1);
+      if (selectedPreviewIndex === index) selectedPreviewIndex = null;
+      updateUI();
+    };
+    numInner.appendChild(numSpan);
+    numInner.appendChild(btnDelX);
+    tdNum.appendChild(numInner);
+    tr.appendChild(tdNum);
+
+    const tdHandle = document.createElement('td');
+    tdHandle.className = 'drag-handle';
+    tdHandle.innerHTML = '☰';
+    tr.appendChild(tdHandle);
+
+    const tdName = document.createElement('td');
+    tdName.className = 'file-name-cell';
+    tdName.textContent = item.file.name;
+    tdName.title = item.file.name;
+    tr.appendChild(tdName);
+
+    const tdStatus = document.createElement('td');
+    tdStatus.innerHTML = item.ok ? '<span class="status-ok">✅ 정상</span>' : `<span class="status-err">❌ ${item.error || '오류'}</span>`;
+    tr.appendChild(tdStatus);
+
+    fileListBody.appendChild(tr);
+  });
+
+  const readyCount = fileDataList.filter(i => i.ok).length;
+  mergeBtn.disabled = readyCount < 1;
+}
+
+function renderPreview(index) {
+  const item = fileDataList[index];
+  previewTitleName.textContent = item.file.name;
+  if (!item.ok) {
+    previewBox.innerHTML = `<p class="preview-placeholder">이 파일은 미리볼 수 없습니다. (${item.error || '오류'})</p>`;
+    return;
+  }
+  previewBox.innerHTML = item.previewHtml || '<p class="preview-placeholder">(본문 내용 없음)</p>';
+}
+
+function handleDragStart(e) { draggedIndex = Number(this.dataset.index); this.classList.add('dragging'); }
+function handleDragOver(e) { e.preventDefault(); this.classList.add('drag-over'); }
+function handleDragLeave() { this.classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.preventDefault();
+  this.classList.remove('drag-over');
+  const targetIndex = Number(this.dataset.index);
+  if (draggedIndex !== null && draggedIndex !== targetIndex) {
+    const moved = fileDataList.splice(draggedIndex, 1)[0];
+    fileDataList.splice(targetIndex, 0, moved);
+    selectedPreviewIndex = null;
+    updateUI();
+  }
+}
+function handleDragEnd() { this.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); }
+
+function resetAll() {
+  if (fileDataList.length === 0) return;
+  fileDataList = [];
+  draggedIndex = null;
+  selectedPreviewIndex = null;
+  fileInput.value = '';
+  previewTitleName.textContent = '';
+  previewBox.innerHTML = '<p class="preview-placeholder">목록에서 파일을 클릭하면 표시됩니다.</p>';
+  statusEl.textContent = '';
+  updateUI();
+}
+
+async function mergeAndDownload() {
+  const readyFiles = fileDataList.filter(i => i.ok);
+  if (readyFiles.length < 1) return;
+
+  mergeBtn.disabled = true;
+  mergeBtn.classList.add('working');
+  mergeBtn.textContent = '병합 중...';
+  statusEl.textContent = '';
+
+  try {
+    const fileEntries = [];
+    for (const item of readyFiles) {
+      fileEntries.push({ name: item.file.name, arrayBuffer: await item.file.arrayBuffer() });
+    }
+    const outZip = await mergeHwpxFiles(fileEntries);
+    const blob = await outZip.generateAsync({ type: 'blob', mimeType: 'application/hwp+zip' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '한글_통합_결과.hwpx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    statusEl.textContent = `✅ ${readyFiles.length}개 문서를 성공적으로 병합했습니다.`;
+    statusEl.style.color = '#166534';
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = '❌ 병합 중 오류가 발생했습니다: ' + (err && err.message ? err.message : '알 수 없는 오류');
+    statusEl.style.color = '#ef4444';
+  } finally {
+    mergeBtn.disabled = false;
+    mergeBtn.classList.remove('working');
+    mergeBtn.textContent = '선택한 순서대로 하나로 병합하여 다운로드';
+  }
+}
+</script>
+
+</body>
+</html>
