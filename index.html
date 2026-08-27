@@ -16,6 +16,9 @@
 
   h2 { margin: 0 0 4px 0; color: #0f172a; font-size: 1.5rem; display: flex; align-items: center; gap: 8px; }
   .subtitle { color: #64748b; font-size: 0.9rem; margin: 0 0 20px 0; }
+  .cross-links { display: flex; gap: 16px; margin: -10px 0 20px 0; }
+  .cross-link { font-size: 0.82rem; color: #2563eb; text-decoration: none; font-weight: 600; }
+  .cross-link:hover { text-decoration: underline; }
 
   .security-banner { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px; color: #166534; font-size: 0.9rem; line-height: 1.55; margin-bottom: 18px; }
   .security-banner-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
@@ -84,6 +87,10 @@
 <div class="app-container">
   <h2>📄 한글(HWPX) 문서 병합기</h2>
   <p class="subtitle">여러 개의 .hwpx 파일을 지정한 순서대로 하나의 문서로 합칩니다. (각 문서는 새 페이지로 이어붙습니다)</p>
+  <div class="cross-links">
+    <a class="cross-link" href="https://nunco-git.github.io/excelmerge/" target="_blank" rel="noopener noreferrer">📊 엑셀 병합기 바로가기 →</a>
+    <a class="cross-link" href="https://pdf-frontend-sigma-one.vercel.app/" target="_blank" rel="noopener noreferrer">📄 PDF 병합기 바로가기 →</a>
+  </div>
 
   <div class="security-banner">
     <div class="security-banner-header">
