@@ -12,11 +12,66 @@
   * { box-sizing: border-box; }
   body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; background: #f8fafc; margin: 0; padding: 24px; color: #334155; }
 
-  .app-container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 16px; box-shadow: 0 6px 20px rgba(0,0,0,0.05); padding: 32px; }
+  .app-container {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 30px;
+    max-width: 1900px;
+    width: 100%;
+    margin: 0 auto;
+    align-items: start;
+  }
+
+  .sidebar { width: 220px; display: flex; flex-direction: column; gap: 20px; }
+  .banner-card {
+    background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .banner-card:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(0,0,0,0.08); }
+  .banner-card img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; background-color: #f8fafc; }
+  .banner-card h4 { margin: 6px 0 4px 0; font-size: 16px; color: #1e293b; word-break: keep-all; }
+  .banner-card p { font-size: 14px; color: #64748b; margin: 0 0 10px 0; line-height: 1.4; word-break: keep-all; }
+  .banner-card a { display: inline-block; width: 100%; padding: 8px 0; background-color: #f1f5f9; color: #2563eb; text-decoration: none; font-size: 14px; font-weight: bold; border-radius: 6px; transition: background 0.2s; }
+  .banner-card a:hover { background-color: #e2e8f0; }
+
+  .main-content {
+    width: 100%;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+    min-height: 88vh;
+  }
+
+  /* 상단 20% : 하단 80% 영역 분할 */
+  .top-section { flex: 0 0 20%; min-height: 150px; display: flex; align-items: stretch; gap: 14px; margin-bottom: 20px; }
+  .top-col-title {
+    flex: 0 0 22%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    text-align: center;
+    background: linear-gradient(160deg, #eff6ff 0%, #f8fafc 100%);
+    border: 1px solid #dbeafe; border-radius: 14px; padding: 14px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04), 0 1px 2px rgba(16, 24, 40, 0.03);
+  }
+  .top-col-title h2 {
+    margin: 0; display: block; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.3;
+    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 55%, #4f46e5 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .top-col-guide { flex: 1 1 46%; display: flex; min-width: 0; }
+  .top-col-guide .security-banner { width: 100%; margin-bottom: 0; }
+  .top-col-drop { flex: 0 0 32%; display: flex; }
+  .top-col-drop .drop-zone { flex: 1; margin-bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .drop-zone .drop-icon { display: block; font-size: 30px; margin-bottom: 8px; }
+  .drop-zone strong { display: block; font-size: 16px; font-weight: 700; line-height: 1.55; color: #1e3a8a; letter-spacing: -0.2px; }
 
   h2 { margin: 0 0 4px 0; color: #0f172a; font-size: 1.5rem; display: flex; align-items: center; gap: 8px; }
   .subtitle { color: #64748b; font-size: 0.9rem; margin: 0 0 20px 0; }
-  .cross-links { display: flex; gap: 16px; margin: -10px 0 20px 0; }
+  .cross-links { display: flex; flex-direction: column; gap: 4px; margin: 0; }
   .cross-link { font-size: 0.82rem; color: #2563eb; text-decoration: none; font-weight: 600; }
   .cross-link:hover { text-decoration: underline; }
 
@@ -59,7 +114,7 @@
   .drop-zone:hover, .drop-zone.highlight { background-color: #dbeafe; border-color: #1d4ed8; }
   input[type="file"] { display: none; }
 
-  .editor-layout { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 0; margin-bottom: 8px; min-height: 420px; }
+  .editor-layout { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 0; margin-bottom: 8px; min-height: 420px; flex: 1 1 80%; }
   .editor-resizer { flex: 0 0 14px; width: 14px; background: #f1f5f9; cursor: col-resize; margin: 0 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; user-select: none; align-self: stretch; }
   .editor-resizer::before { content: '⋮'; color: #94a3b8; font-size: 14px; font-weight: bold; }
   .editor-resizer:hover, .editor-resizer.resizing { background: #2563eb; }
@@ -100,6 +155,30 @@
   .merge-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
   .merge-btn.working { background: #64748b; cursor: wait; }
 
+  .modal {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000;
+  }
+  .modal-content { background: white; padding: 28px; border-radius: 14px; width: 480px; max-height: 85vh; overflow-y: auto; }
+  .modal-content h3 { margin-top: 0; font-size: 20px; }
+  .input-group { margin-bottom: 14px; text-align: left; }
+  .input-group label { display: block; font-size: 14px; font-weight: bold; margin-bottom: 6px; color: #334155; }
+  .input-group input, .input-group textarea, .input-group select { width: 100%; padding: 10px; font-size: 15px; border: 1px solid #cbd5e1; border-radius: 6px; }
+  .modal-btns { display: flex; gap: 10px; margin-top: 24px; }
+  .modal-btns button { flex: 1; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 15px; }
+  .btn-save { background: #2563eb; color: white; }
+  .btn-close { background: #e2e8f0; color: #334155; }
+
+  @media (max-width: 1180px) {
+    .app-container { display: flex; flex-direction: column; align-items: center; }
+    .sidebar { width: 100%; max-width: 900px; display: grid; grid-template-columns: repeat(4, 1fr); }
+    .main-content { min-height: auto; }
+    .top-section { flex-direction: column; flex-basis: auto; height: auto; }
+    .top-col-title, .top-col-guide, .top-col-drop { flex-basis: auto; width: 100%; }
+  }
+  @media (max-width: 640px) {
+    .sidebar { grid-template-columns: repeat(2, 1fr); }
+  }
   @media (max-width: 900px) {
     .editor-layout { flex-direction: column; }
     .file-list-container, .preview-panel { flex-basis: auto !important; width: 100%; max-width: 100%; }
@@ -112,28 +191,45 @@
 <body>
 
 <div class="app-container">
-  <h2>📄 한글(HWPX) 문서 병합기</h2>
-  <p class="subtitle">여러 개의 .hwpx 파일을 지정한 순서대로 하나의 문서로 합칩니다. (각 문서는 새 페이지로 이어붙습니다)</p>
-  <div class="cross-links">
-    <a class="cross-link" href="https://nunco-git.github.io/excelmerge/" target="_blank" rel="noopener noreferrer">📊 엑셀 병합기 바로가기 →</a>
-    <a class="cross-link" href="https://pdf-frontend-sigma-one.vercel.app/" target="_blank" rel="noopener noreferrer">📄 PDF 병합기 바로가기 →</a>
+  <div class="sidebar">
+    <div class="banner-card" id="card-1"></div>
+    <div class="banner-card" id="card-2"></div>
+    <div class="banner-card" id="card-3"></div>
+    <div class="banner-card" id="card-4"></div>
   </div>
 
-  <div class="security-banner">
-    <div class="security-banner-header">
-      <strong>🔒 개인정보 및 문서 보안 100% 보장</strong>
-      <button class="btn-reset" id="reset-btn" onclick="resetAll()" disabled>🗑️ 초기화</button>
+  <div class="main-content">
+    <div class="top-section">
+      <div class="top-col-title">
+        <h2>📄 한글(HWPX)<br>문서 병합기</h2>
+        <div class="cross-links">
+          <a class="cross-link" href="https://nunco-git.github.io/excelmerge/" target="_blank" rel="noopener noreferrer">📊 엑셀 병합기 바로가기 →</a>
+          <a class="cross-link" href="https://pdf-frontend-sigma-one.vercel.app/" target="_blank" rel="noopener noreferrer">📄 PDF 병합기 바로가기 →</a>
+        </div>
+      </div>
+
+      <div class="top-col-guide">
+        <div class="security-banner">
+          <div class="security-banner-header">
+            <strong>🔒 개인정보 및 문서 보안 100% 보장</strong>
+            <button class="btn-reset" id="reset-btn" onclick="resetAll()" disabled>🗑️ 초기화</button>
+          </div>
+          <ul class="security-features">
+            <li><span class="feat-icon">🌐</span><span><strong>외부 서버 전송 ZERO</strong> <span class="feat-desc">: 파일이 외부로 전송되지 않고 브라우저 안에서만 처리</span></span></li>
+            <li><span class="feat-icon">📐</span><span><strong>서식 보존</strong> <span class="feat-desc">: 폰트·테두리·문단모양·표 서식을 문서별로 정확히 유지</span></span></li>
+            <li><span class="feat-icon">📎</span><span><strong>순서대로 병합</strong> <span class="feat-desc">: 지정한 순서대로 새 페이지에 이어붙여 병합</span></span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="top-col-drop">
+        <div class="drop-zone" id="drop-zone">
+          <span class="drop-icon">📁</span>
+          <strong>클릭하거나 .hwpx 파일들을<br>이곳으로 끌어다 놓으세요</strong>
+          <input type="file" id="file-input" multiple accept=".hwpx" style="display:none;">
+        </div>
+      </div>
     </div>
-    <ul class="security-features">
-      <li><span class="feat-icon">🌐</span><span><strong>외부 서버 전송 ZERO</strong> <span class="feat-desc">: 파일이 외부로 전송되지 않고 브라우저 안에서만 처리</span></span></li>
-      <li><span class="feat-icon">📐</span><span><strong>서식 보존</strong> <span class="feat-desc">: 폰트·테두리·문단모양·표 서식을 문서별로 정확히 유지</span></span></li>
-    </ul>
-  </div>
-
-  <div class="drop-zone" id="drop-zone">
-    📁 <strong>클릭하거나 .hwpx 파일들을 이곳으로 끌어다 놓으세요</strong>
-    <input type="file" id="file-input" multiple accept=".hwpx" style="display:none;">
-  </div>
 
   <div class="editor-layout">
     <div class="file-list-container" id="left-panel">
@@ -167,7 +263,56 @@
 
   <button class="merge-btn" id="merge-btn" disabled onclick="mergeAndDownload()">선택한 순서대로 하나로 병합하여 다운로드</button>
   <div id="status" style="margin-top: 14px; text-align: center; font-size: 0.9rem; font-weight: 600;"></div>
+  </div>
 </div>
+
+<div class="modal" id="adminModal">
+  <div class="modal-content">
+    <h3>⚙️ 좌측 배너 수시 편집 (총 4개)</h3>
+    <div class="input-group">
+      <label>편집할 카드 위치 선택</label>
+      <select id="editCardSelect" onchange="loadCardDataToForm()">
+        <option value="1">1번 카드 (상단)</option>
+        <option value="2">2번 카드</option>
+        <option value="3">3번 카드</option>
+        <option value="4">4번 카드 (하단)</option>
+      </select>
+    </div>
+
+    <div class="input-group">
+      <label>제목</label>
+      <input type="text" id="editTitle" placeholder="예: 주요 공지사항" />
+    </div>
+
+    <div class="input-group">
+      <label>설명 문구</label>
+      <textarea id="editDesc" rows="2" placeholder="예: 관련 링크를 클릭하세요."></textarea>
+    </div>
+
+    <div class="input-group">
+      <label>이미지 URL</label>
+      <input type="text" id="editImgUrl" placeholder="https://example.com/banner.png" />
+    </div>
+
+    <div class="input-group">
+      <label>이동할 링크 (URL)</label>
+      <input type="text" id="editLinkUrl" placeholder="https://example.com" />
+    </div>
+
+    <div class="input-group">
+      <label>링크 버튼 이름</label>
+      <input type="text" id="editBtnText" placeholder="예: 바로가기" />
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn-save" onclick="saveCardData()">저장하기</button>
+      <button class="btn-close" onclick="closeAdminModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
 <script>
 /* =========================================================================
@@ -943,6 +1088,164 @@ async function mergeAndDownload() {
     mergeBtn.disabled = false;
     mergeBtn.classList.remove('working');
     mergeBtn.textContent = '선택한 순서대로 하나로 병합하여 다운로드';
+  }
+}
+
+// ── 좌측 광고 배너 (PDF/엑셀 병합기와 같은 Firebase 프로젝트를 공유하되,
+//    문서는 별도로 분리하여 서로 다른 앱의 배너 데이터가 겹치지 않게 함) ──
+const firebaseConfig = {
+  apiKey: "AIzaSyB1KB8TojybTREGiKJJukmgcGgtDTbZodA",
+  authDomain: "ezpdfmerger.firebaseapp.com",
+  projectId: "ezpdfmerger",
+  storageBucket: "ezpdfmerger.firebasestorage.app",
+  messagingSenderId: "613693021673",
+  appId: "1:613693021673:web:41982b69c1e70692e83f78",
+  measurementId: "G-P70QSP1WSV"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const BANNER_DOC = db.collection('settings').doc('hwpx_banners');
+
+const defaultCards = {};
+for (let i = 1; i <= 4; i++) {
+  defaultCards[i] = {
+    title: `알림 배너 ${i}`,
+    desc: `클릭하면 해당 링크로 바로 연결됩니다.`,
+    img: "",
+    link: "#",
+    btnText: "자세히 보기"
+  };
+}
+
+let cachedCards = null;
+
+function getCardData() {
+  return cachedCards || defaultCards;
+}
+
+// 안전한 http/https URL만 허용 (javascript:, data: 등 스킴 차단)
+function sanitizeUrl(url) {
+  if (!url) return '';
+  const trimmed = String(url).trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : '';
+}
+
+function applyCardsToDOM(cards) {
+  for (let i = 1; i <= 4; i++) {
+    const cardEl = document.getElementById(`card-${i}`);
+    if (!cardEl) continue;
+    const data = cards[i] || defaultCards[i];
+    cardEl.innerHTML = '';
+
+    const safeImg = sanitizeUrl(data.img);
+    if (safeImg) {
+      const img = document.createElement('img');
+      img.src = safeImg;
+      img.alt = 'banner';
+      cardEl.appendChild(img);
+    }
+
+    const h4 = document.createElement('h4');
+    h4.textContent = data.title || '';
+    cardEl.appendChild(h4);
+
+    const p = document.createElement('p');
+    p.textContent = data.desc || '';
+    cardEl.appendChild(p);
+
+    const a = document.createElement('a');
+    a.href = sanitizeUrl(data.link) || '#';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = data.btnText || '';
+    cardEl.appendChild(a);
+  }
+}
+
+async function fetchAndRenderBanners() {
+  try {
+    const doc = await BANNER_DOC.get();
+    cachedCards = (doc.exists && doc.data().cards)
+      ? { ...defaultCards, ...doc.data().cards }
+      : { ...defaultCards };
+  } catch (error) {
+    console.error('배너 데이터 불러오기 오류:', error);
+    cachedCards = { ...defaultCards };
+  }
+  applyCardsToDOM(cachedCards);
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  await fetchAndRenderBanners();
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('admin') === 'true') {
+    openAdminModal();
+  }
+});
+
+async function openAdminModal() {
+  const inputPw = prompt("편집 권한 비밀번호를 입력하세요.");
+  if (!inputPw) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return;
+  }
+
+  try {
+    const docRef = db.collection("settings").doc("admin");
+    const doc = await docRef.get();
+
+    if (doc.exists && doc.data().password === inputPw) {
+      document.getElementById('adminModal').style.display = 'flex';
+      loadCardDataToForm();
+    } else {
+      alert("비밀번호가 올바르지 않습니다.");
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  } catch (error) {
+    console.error("인증 오류:", error);
+    alert("비밀번호 검증 중 오류가 발생했습니다.");
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
+
+function closeAdminModal() {
+  document.getElementById('adminModal').style.display = 'none';
+  window.history.replaceState({}, document.title, window.location.pathname);
+}
+
+function loadCardDataToForm() {
+  const id = document.getElementById('editCardSelect').value;
+  const cards = getCardData();
+  const data = cards[id] || defaultCards[id];
+
+  document.getElementById('editTitle').value = data.title;
+  document.getElementById('editDesc').value = data.desc;
+  document.getElementById('editImgUrl').value = data.img;
+  document.getElementById('editLinkUrl').value = data.link;
+  document.getElementById('editBtnText').value = data.btnText;
+}
+
+async function saveCardData() {
+  const id = document.getElementById('editCardSelect').value;
+  const cards = { ...getCardData() };
+
+  cards[id] = {
+    title: document.getElementById('editTitle').value,
+    desc: document.getElementById('editDesc').value,
+    img: document.getElementById('editImgUrl').value,
+    link: document.getElementById('editLinkUrl').value,
+    btnText: document.getElementById('editBtnText').value
+  };
+
+  try {
+    await BANNER_DOC.set({ cards }, { merge: true });
+    cachedCards = cards;
+    applyCardsToDOM(cachedCards);
+    alert(`${id}번 배너 카드가 저장되었습니다! (모든 방문자에게 반영됩니다)`);
+  } catch (error) {
+    console.error('배너 저장 오류:', error);
+    alert('저장 중 오류가 발생했습니다. Firestore 쓰기 권한(보안 규칙)을 확인해주세요.');
   }
 }
 </script>
