@@ -151,22 +151,42 @@
   .hwpx-preview-table td p { margin: 0; }
   .preview-placeholder { text-align: center; color: #94a3b8; margin-top: 80px; font-size: 0.85rem; }
 
-  .merge-mode-toggle {
-    margin-top: 16px;
+  .merge-modes {
+    display: flex;
+    gap: 14px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  .merge-mode-card {
+    flex: 1 1 320px;
     background: #fdf4ff;
     border: 1px solid #f0abfc;
-    border-radius: 10px;
-    padding: 10px 14px;
-    font-size: 0.82rem;
-    color: #86198f;
-    line-height: 1.5;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
   }
-  .merge-mode-toggle label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
-  .merge-mode-toggle input[type="checkbox"] { margin-top: 2px; flex-shrink: 0; width: 15px; height: 15px; accent-color: #a21caf; }
+  .merge-mode-title { font-size: 0.95rem; font-weight: 800; color: #86198f; margin-bottom: 6px; }
+  .merge-mode-desc { font-size: 0.8rem; color: #86198f; line-height: 1.5; flex: 1; }
+  .blank-template-row { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #f0abfc; }
+  .btn-blank-template {
+    border: 1px solid #d946ef;
+    background: white;
+    color: #a21caf;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .btn-blank-template:hover { background: #fdf4ff; }
 
   .merge-btn { width: 100%; padding: 16px; background: #10b981; color: white; border: none; border-radius: 10px; font-size: 1.05rem; font-weight: 700; cursor: pointer; margin-top: 20px; }
   .merge-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
   .merge-btn.working { background: #64748b; cursor: wait; }
+  .merge-mode-card .merge-btn { margin-top: 14px; }
+  .merge-mode-card .btn-simple { background: #0ea5e9; }
+  .merge-mode-card .btn-compare { background: #a21caf; }
 
   .modal {
     display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -274,13 +294,27 @@
     </div>
   </div>
 
-  <div class="merge-mode-toggle">
-    <label>
-      <input type="checkbox" id="template-mode-checkbox" />
-      🧾 같은 표 양식(체크리스트·감사자료·보고서 등) 파일들을 병합합니다 — 문서 안에 표가 여러 개 이어져도 같은 위치의 표끼리 짝지어, 목차/항목명처럼 모든 파일에 동일한 내용은 한 번만 남기고 값이 다른 행만 모아 취합
-    </label>
+  <div class="merge-modes">
+    <div class="merge-mode-card">
+      <div class="merge-mode-title">🧾 단순 취합</div>
+      <div class="merge-mode-desc">서식·폰트를 그대로 유지한 채, 각 파일의 표 내용을 순서대로 아래에 이어붙입니다. 목차/항목명 등 중복 여부는 따지지 않고 모든 행을 그대로 붙여넣습니다.</div>
+      <button class="merge-btn btn-simple" id="merge-btn-simple" disabled onclick="mergeAndDownload('simple')">단순 취합하여 다운로드</button>
+    </div>
+
+    <div class="merge-mode-card">
+      <div class="merge-mode-title">🔍 서식 비교 취합</div>
+      <div class="merge-mode-desc">같은 표 양식(체크리스트·감사자료·보고서 등) 파일들을 원본 서식과 비교해서, 목차/항목명처럼 모든 파일에 동일한 내용은 한 번만 남기고 값이 다른 행만 모아 취합합니다. 문서 안에 표가 여러 개 이어져도 같은 위치의 표끼리 짝짓습니다.</div>
+      <div class="blank-template-row">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:normal;">
+          <span>📄 빈 서식 파일 (선택 — 결과물에는 포함되지 않고 비교 기준으로만 사용)</span>
+          <button type="button" class="btn-blank-template" onclick="document.getElementById('blank-template-input').click()">파일 선택</button>
+          <input type="file" id="blank-template-input" accept=".hwpx" style="display:none;" onchange="handleBlankTemplateSelect(event)" />
+        </label>
+        <div id="blank-template-name" style="margin-top:6px; font-size:0.78rem; color:#86198f;"></div>
+      </div>
+      <button class="merge-btn btn-compare" id="merge-btn-compare" disabled onclick="mergeAndDownload('compare')">서식 비교 취합하여 다운로드</button>
+    </div>
   </div>
-  <button class="merge-btn" id="merge-btn" disabled onclick="mergeAndDownload()">선택한 순서대로 하나로 병합하여 다운로드</button>
   <div id="status" style="margin-top: 14px; text-align: center; font-size: 0.9rem; font-weight: 600;"></div>
   </div>
 </div>
@@ -687,25 +721,44 @@ function foldRowsIntoBase(baseRows, newRows) {
 // - 각 셀의 hp:cellAddr rowAddr: 그 셀이 위치한 새 행 번호로 갱신
 // - hp:tbl의 rowCnt: 실제 행 개수로 갱신
 // - hp:tbl의 hp:sz height: 각 행 높이(그 행 첫 번째 셀의 cellSz height)를 모두 더한 값으로 갱신
-function normalizeTableAfterRowMerge(baseTbl, mergedRows) {
+// - 맨 위쪽 공통 행(제목/열 이름 등, headerRowCount만큼)을 "제목 줄"로 지정하고
+//   표의 제목 줄 반복 기능을 켜서, 표가 페이지를 넘어갈 때 그 줄이 다음 페이지에도
+//   반복해서 보이도록 함 (원본 문서에는 이 지정이 되어 있지 않아 내용이 늘어나도
+//   다음 페이지에서 어떤 항목인지 알 수 없었음)
+function normalizeTableAfterRowMerge(baseTbl, mergedRows, headerRowCount) {
   let totalHeight = 0;
   mergedRows.forEach(({ trEl }, newRowIdx) => {
     const tcs = els(trEl, 'hp:tc');
     tcs.forEach(tc => {
       const cellAddr = els(tc, 'hp:cellAddr')[0];
       if (cellAddr) cellAddr.setAttribute('rowAddr', String(newRowIdx));
+      if (newRowIdx < headerRowCount) tc.setAttribute('header', '1');
     });
     const firstCellSz = tcs.length > 0 ? els(tcs[0], 'hp:cellSz')[0] : null;
     if (firstCellSz) totalHeight += parseInt(firstCellSz.getAttribute('height'), 10) || 0;
   });
 
   baseTbl.setAttribute('rowCnt', String(mergedRows.length));
+  if (headerRowCount > 0) baseTbl.setAttribute('repeatHeader', '1');
 
   const szEl = els(baseTbl, 'hp:sz')[0];
   if (szEl && totalHeight > 0) szEl.setAttribute('height', String(totalHeight));
 }
 
-async function mergeHwpxFilesAsTable(fileEntries) {
+// 모든 파일에서 완전히 동일한 맨 위쪽 행이 몇 줄 이어지는지 센다. 이 구간이
+// 곧 "제목(목차) 구간"이며, 그중 마지막 줄까지가 반복 표시할 제목 줄이 된다.
+function commonPrefixLength(perFileRows) {
+  const minLen = Math.min(...perFileRows.map(rows => rows.length));
+  let i = 0;
+  while (i < minLen) {
+    const texts = perFileRows.map(rows => rows[i].text);
+    if (!texts.every(t => t === texts[0])) break;
+    i++;
+  }
+  return i;
+}
+
+async function mergeHwpxFilesAsTable(fileEntries, blankTemplateEntry) {
   if (!fileEntries || fileEntries.length === 0) throw new Error('NO_FILES');
   const zips = [];
   for (const f of fileEntries) zips.push(await JSZip.loadAsync(f.arrayBuffer));
@@ -775,9 +828,26 @@ async function mergeHwpxFilesAsTable(fileEntries) {
     });
   }
 
+  // 빈 서식 파일(선택): 결과물에는 내용이 들어가지 않고, "제목 구간이 어디까지인지"
+  // 판단하는 비교 기준으로만 쓰인다. 실제 데이터 파일이 1개뿐이라 데이터 파일들끼리만
+  // 비교해서는 제목/데이터 경계를 알 수 없는 경우에도, 빈 서식과 비교하면 정확히 구분된다.
+  let templateOnlyRowsPerTable = null;
+  if (blankTemplateEntry) {
+    const templateZip = await JSZip.loadAsync(blankTemplateEntry.arrayBuffer);
+    const template = await loadAllTables(templateZip, blankTemplateEntry.name);
+    if (template.tables.length !== baseTables.length) {
+      throw new Error(`빈 서식 파일의 표 개수(${template.tables.length}개)가 나머지 파일(${baseTables.length}개)과 다릅니다.`);
+    }
+    templateOnlyRowsPerTable = template.tables.map(tbl => els(tbl, 'hp:tr').map(tr => ({ trEl: tr, text: getRowText(tr) })));
+  }
+
   baseTables.forEach((baseTbl, tableIdx) => {
     const perFileRows = perTableFileRows[tableIdx];
-    let mergedRows = perFileRows[0]; // 첫 파일의 행에서 시작
+    const rowsForHeaderCheck = templateOnlyRowsPerTable
+      ? [templateOnlyRowsPerTable[tableIdx], ...perFileRows]
+      : perFileRows;
+    const headerRowCount = commonPrefixLength(rowsForHeaderCheck);
+    let mergedRows = perFileRows[0]; // 첫 파일의 행에서 시작 (빈 서식 파일 자체는 결과에 포함하지 않음)
     for (let f = 1; f < perFileRows.length; f++) {
       mergedRows = foldRowsIntoBase(mergedRows, perFileRows[f]);
     }
@@ -789,7 +859,114 @@ async function mergeHwpxFilesAsTable(fileEntries) {
       baseTbl.appendChild(node);
       return { trEl: node }; // 실제로 문서에 들어간 노드(복사본일 수 있음)를 기준으로 좌표를 갱신해야 함
     });
-    normalizeTableAfterRowMerge(baseTbl, insertedRows);
+    normalizeTableAfterRowMerge(baseTbl, insertedRows, headerRowCount);
+  });
+
+  els(baseHeaderDoc, 'hh:head')[0].setAttribute('secCnt', String(base.sectionHrefs.length));
+
+  const outputFiles = {};
+  base.sectionHrefs.forEach((href, idx) => { outputFiles[href] = serializeXml(base.sectionDocs[idx]); });
+  outputFiles['Contents/header.xml'] = serializeXml(baseHeaderDoc);
+  outputFiles['Contents/content.hpf'] = serializeXml(baseHpfDoc);
+
+  const passthroughPaths = ['mimetype', 'version.xml', 'settings.xml', 'META-INF/container.xml', 'META-INF/container.rdf', 'META-INF/manifest.xml'];
+  for (const p of passthroughPaths) {
+    const f = zips[0].file(p);
+    if (f) outputFiles[p] = await f.async('string');
+  }
+
+  const outZip = new JSZip();
+  if (outputFiles['mimetype'] != null) {
+    outZip.file('mimetype', outputFiles['mimetype'], { compression: 'STORE', createFolders: false });
+    delete outputFiles['mimetype'];
+  }
+  for (const [path, content] of Object.entries(outputFiles)) outZip.file(path, content, { createFolders: false, compression: 'DEFLATE' });
+  for (const [path, content] of Object.entries(outputBinary)) outZip.file(path, content, { createFolders: false, compression: 'DEFLATE' });
+  return outZip;
+}
+
+/* =========================================================================
+ * "단순 취합" 모드 — 서식 비교나 중복 판단 없이, 같은 위치의 표끼리 짝지어
+ * 각 파일의 행을 순서대로 그대로 이어붙인다. 서식·폰트는 그대로 유지되며,
+ * 어떤 행이 목차이고 어떤 행이 데이터인지는 따지지 않는다.
+ * ========================================================================= */
+async function mergeHwpxFilesAsTableSimple(fileEntries) {
+  if (!fileEntries || fileEntries.length === 0) throw new Error('NO_FILES');
+  const zips = [];
+  for (const f of fileEntries) zips.push(await JSZip.loadAsync(f.arrayBuffer));
+
+  async function readXml(zip, path) {
+    const file = zip.file(path);
+    if (!file) return null;
+    return parseXml(await file.async('string'));
+  }
+  async function getSpineSectionHrefs(zip) {
+    const hpfDoc = await readXml(zip, 'Contents/content.hpf');
+    const itemById = {};
+    els(hpfDoc, 'opf:item').forEach(it => { itemById[it.getAttribute('id')] = it.getAttribute('href'); });
+    const hrefs = [];
+    els(hpfDoc, 'opf:itemref').forEach(ir => {
+      const href = itemById[ir.getAttribute('idref')];
+      if (href && /Contents\/section\d+\.xml$/.test(href)) hrefs.push(href);
+    });
+    return hrefs;
+  }
+  async function loadAllTables(zip, fileLabel) {
+    const headerDoc = await readXml(zip, 'Contents/header.xml');
+    const sectionHrefs = await getSpineSectionHrefs(zip);
+    if (sectionHrefs.length === 0) throw new Error(`"${fileLabel}" 파일에서 본문을 찾을 수 없습니다.`);
+    const sectionDocs = [];
+    for (const href of sectionHrefs) sectionDocs.push(await readXml(zip, href));
+    const tables = [];
+    sectionDocs.forEach(sectionDoc => { els(sectionDoc, 'hp:tbl').forEach(tbl => tables.push(tbl)); });
+    if (tables.length === 0) throw new Error(`"${fileLabel}" 파일에 표가 없습니다. 단순 취합은 표가 있는 문서에서만 가능합니다.`);
+    return { headerDoc, sectionHrefs, sectionDocs, tables };
+  }
+
+  const baseHpfDoc = await readXml(zips[0], 'Contents/content.hpf');
+  const base = await loadAllTables(zips[0], fileEntries[0].name);
+  const baseHeaderDoc = base.headerDoc;
+  const baseTables = base.tables;
+
+  const outputBinary = {};
+  for (const bf of zips[0].file(/^BinData\//)) outputBinary[bf.name] = await bf.async('uint8array');
+
+  // perTableFileRows[tableIdx][fileIdx] = [trEl, ...]
+  const perTableFileRows = baseTables.map(tbl => [els(tbl, 'hp:tr')]);
+
+  for (let i = 1; i < zips.length; i++) {
+    const zip = zips[i];
+    const incoming = await loadAllTables(zip, fileEntries[i].name);
+
+    if (incoming.tables.length !== baseTables.length) {
+      throw new Error(`"${fileEntries[i].name}" 파일의 표 개수(${incoming.tables.length}개)가 기준 파일(${baseTables.length}개)과 다릅니다. 모든 파일의 표 개수와 순서가 같아야 합니다.`);
+    }
+
+    mergeOneDocument(baseHeaderDoc, incoming.headerDoc, incoming.sectionDocs);
+
+    for (const bf of zip.file(/^BinData\//)) {
+      let newName = bf.name;
+      if (outputBinary[newName]) newName = bf.name.replace('BinData/', `BinData/f${i}_`);
+      outputBinary[newName] = await bf.async('uint8array');
+    }
+
+    incoming.tables.forEach((tbl, tableIdx) => {
+      perTableFileRows[tableIdx].push(els(tbl, 'hp:tr'));
+    });
+  }
+
+  baseTables.forEach((baseTbl, tableIdx) => {
+    // 중복 판단 없이 각 파일의 행을 순서대로 그대로 이어붙인다.
+    const allTrEls = [].concat(...perTableFileRows[tableIdx]);
+
+    const baseSectionDoc = baseTbl.ownerDocument;
+    els(baseTbl, 'hp:tr').forEach(tr => baseTbl.removeChild(tr));
+    const insertedRows = allTrEls.map(trEl => {
+      const node = (trEl.ownerDocument === baseSectionDoc) ? trEl : baseSectionDoc.importNode(trEl, true);
+      baseTbl.appendChild(node);
+      return { trEl: node };
+    });
+    normalizeTableAfterRowMerge(baseTbl, insertedRows, 0); // 단순 취합은 제목 줄을 별도로 지정하지 않음
   });
 
   els(baseHeaderDoc, 'hh:head')[0].setAttribute('secCnt', String(base.sectionHrefs.length));
@@ -822,7 +999,8 @@ const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const fileListBody = document.getElementById('file-list-body');
 const fileCountUI = document.getElementById('file-count');
-const mergeBtn = document.getElementById('merge-btn');
+const mergeBtnSimple = document.getElementById('merge-btn-simple');
+const mergeBtnCompare = document.getElementById('merge-btn-compare');
 const previewBox = document.getElementById('preview-box');
 const previewTitleName = document.getElementById('preview-title-name');
 const statusEl = document.getElementById('status');
@@ -1161,7 +1339,8 @@ function updateUI() {
   const resetBtn = document.getElementById('reset-btn');
   if (fileDataList.length === 0) {
     fileListBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 20px;">첨부된 파일이 없습니다.</td></tr>';
-    mergeBtn.disabled = true;
+    mergeBtnSimple.disabled = true;
+    mergeBtnCompare.disabled = true;
     fileCountUI.textContent = '0';
     if (resetBtn) resetBtn.disabled = true;
     return;
@@ -1230,7 +1409,8 @@ function updateUI() {
   });
 
   const readyCount = fileDataList.filter(i => i.ok).length;
-  mergeBtn.disabled = readyCount < 1;
+  mergeBtnSimple.disabled = readyCount < 1;
+  mergeBtnCompare.disabled = readyCount < 1;
 }
 
 function renderPreview(index) {
@@ -1271,16 +1451,45 @@ function resetAll() {
   updateUI();
 }
 
-async function mergeAndDownload() {
+let blankTemplateFile = null; // 비교 기준으로만 쓰고 결과물에는 포함하지 않을 빈 서식 파일 (서식 비교 취합 전용)
+
+function handleBlankTemplateSelect(event) {
+  const file = event.target.files && event.target.files[0];
+  const nameEl = document.getElementById('blank-template-name');
+  if (!file) {
+    blankTemplateFile = null;
+    nameEl.textContent = '';
+    return;
+  }
+  if (!file.name.toLowerCase().endsWith('.hwpx')) {
+    alert('.hwpx 파일만 선택할 수 있습니다.');
+    event.target.value = '';
+    return;
+  }
+  blankTemplateFile = file;
+  nameEl.innerHTML = `✅ <strong>${file.name}</strong> <a href="#" onclick="clearBlankTemplate(); return false;" style="margin-left:8px; color:#dc2626;">제거</a>`;
+}
+
+function clearBlankTemplate() {
+  blankTemplateFile = null;
+  document.getElementById('blank-template-input').value = '';
+  document.getElementById('blank-template-name').textContent = '';
+}
+
+// mode: 'simple' (서식·폰트 유지한 채 모든 행을 그대로 이어붙임, 중복 여부는 따지지 않음)
+//     또는 'compare' (원본 서식과 비교해서 목차는 한 번만, 값이 다른 행만 취합)
+async function mergeAndDownload(mode) {
   const readyFiles = fileDataList.filter(i => i.ok);
   if (readyFiles.length < 1) return;
 
-  const templateModeEl = document.getElementById('template-mode-checkbox');
-  const useTemplateMode = !!(templateModeEl && templateModeEl.checked);
+  const activeBtn = mode === 'simple' ? mergeBtnSimple : mergeBtnCompare;
+  const otherBtn = mode === 'simple' ? mergeBtnCompare : mergeBtnSimple;
+  const originalLabel = activeBtn.textContent;
 
-  mergeBtn.disabled = true;
-  mergeBtn.classList.add('working');
-  mergeBtn.textContent = '병합 중...';
+  activeBtn.disabled = true;
+  activeBtn.classList.add('working');
+  activeBtn.textContent = '병합 중...';
+  otherBtn.disabled = true;
   statusEl.textContent = '';
 
   try {
@@ -1288,30 +1497,42 @@ async function mergeAndDownload() {
     for (const item of readyFiles) {
       fileEntries.push({ name: item.file.name, arrayBuffer: await item.file.arrayBuffer() });
     }
-    const outZip = useTemplateMode
-      ? await mergeHwpxFilesAsTable(fileEntries)
-      : await mergeHwpxFiles(fileEntries);
+
+    let outZip, downloadName, doneMessage;
+    if (mode === 'compare') {
+      let blankTemplateEntry = null;
+      if (blankTemplateFile) {
+        blankTemplateEntry = { name: blankTemplateFile.name, arrayBuffer: await blankTemplateFile.arrayBuffer() };
+      }
+      outZip = await mergeHwpxFilesAsTable(fileEntries, blankTemplateEntry);
+      downloadName = '한글_서식통합_결과.hwpx';
+      doneMessage = `✅ ${readyFiles.length}개 문서에서 중복 항목을 제외하고 값만 취합했습니다.`;
+    } else {
+      outZip = await mergeHwpxFilesAsTableSimple(fileEntries);
+      downloadName = '한글_단순취합_결과.hwpx';
+      doneMessage = `✅ ${readyFiles.length}개 문서의 표 내용을 그대로 이어붙였습니다.`;
+    }
+
     const blob = await outZip.generateAsync({ type: 'blob', mimeType: 'application/hwp+zip' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = useTemplateMode ? '한글_서식통합_결과.hwpx' : '한글_통합_결과.hwpx';
+    a.download = downloadName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    statusEl.textContent = useTemplateMode
-      ? `✅ ${readyFiles.length}개 문서에서 중복 항목을 제외하고 값만 취합했습니다.`
-      : `✅ ${readyFiles.length}개 문서를 성공적으로 병합했습니다.`;
+    statusEl.textContent = doneMessage;
     statusEl.style.color = '#166534';
   } catch (err) {
     console.error(err);
     statusEl.textContent = '❌ 병합 중 오류가 발생했습니다: ' + (err && err.message ? err.message : '알 수 없는 오류');
     statusEl.style.color = '#ef4444';
   } finally {
-    mergeBtn.disabled = false;
-    mergeBtn.classList.remove('working');
-    mergeBtn.textContent = '선택한 순서대로 하나로 병합하여 다운로드';
+    activeBtn.disabled = false;
+    activeBtn.classList.remove('working');
+    activeBtn.textContent = originalLabel;
+    otherBtn.disabled = fileDataList.filter(i => i.ok).length < 1;
   }
 }
 
