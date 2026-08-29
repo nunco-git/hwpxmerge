@@ -356,6 +356,19 @@ function parseXml(text) { return new DOMParser().parseFromString(text, 'applicat
 function serializeXml(doc) { return new XMLSerializer().serializeToString(doc); }
 function els(root, tagName) { return Array.from(root.getElementsByTagName(tagName)); }
 
+// 일부 문서는 사용하지 않는 등록부(예: 탭/번호매기기/스타일 등)를 아예 생략하고
+// 저장하기도 한다. 그런 경우 els(...)[0]이 undefined가 되어 이후 병합 로직이
+// 죽는 문제가 있어, 없으면 빈 등록부를 새로 만들어 채워 넣어 항상 존재를 보장한다.
+function ensureRegistry(refListEl, tagName, doc) {
+  let el = els(refListEl, tagName)[0];
+  if (!el) {
+    el = doc.createElementNS(refListEl.namespaceURI || null, tagName);
+    el.setAttribute('itemCnt', '0');
+    refListEl.appendChild(el);
+  }
+  return el;
+}
+
 function mergeSimpleRegistry(baseListEl, incomingItems, itemTagName, targetDoc) {
   const existingIds = els(baseListEl, itemTagName).map(e => parseInt(e.getAttribute('id'), 10));
   let nextId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 0;
@@ -392,8 +405,10 @@ function remapIdRefAttr(root, attrName, idMap) {
 }
 
 function mergeFontfaces(baseHeaderDoc, incomingHeaderDoc) {
-  const baseFontfacesEl = els(baseHeaderDoc, 'hh:fontfaces')[0];
-  const incomingFontfacesEl = els(incomingHeaderDoc, 'hh:fontfaces')[0];
+  const baseRefList = els(baseHeaderDoc, 'hh:refList')[0];
+  const incomingRefList = els(incomingHeaderDoc, 'hh:refList')[0];
+  const baseFontfacesEl = ensureRegistry(baseRefList, 'hh:fontfaces', baseHeaderDoc);
+  const incomingFontfacesEl = ensureRegistry(incomingRefList, 'hh:fontfaces', incomingHeaderDoc);
   const baseGroups = els(baseFontfacesEl, 'hh:fontface');
   const incomingGroups = els(incomingFontfacesEl, 'hh:fontface');
   const fontIdMapByLang = {};
@@ -453,12 +468,12 @@ function mergeOneDocument(baseHeaderDoc, incomingHeaderDoc, incomingSectionDocs)
 
   const fontIdMapByLang = mergeFontfaces(baseHeaderDoc, incomingHeaderDoc);
 
-  const baseBorderFills = els(baseRefList, 'hh:borderFills')[0];
-  const incomingBorderFillItems = els(els(incomingRefList, 'hh:borderFills')[0], 'hh:borderFill');
+  const baseBorderFills = ensureRegistry(baseRefList, 'hh:borderFills', baseHeaderDoc);
+  const incomingBorderFillItems = els(ensureRegistry(incomingRefList, 'hh:borderFills', incomingHeaderDoc), 'hh:borderFill');
   const borderFillIdMap = mergeSimpleRegistry(baseBorderFills, incomingBorderFillItems, 'hh:borderFill', baseHeaderDoc);
 
-  const baseCharProps = els(baseRefList, 'hh:charProperties')[0];
-  const incomingCharPrItems = els(els(incomingRefList, 'hh:charProperties')[0], 'hh:charPr');
+  const baseCharProps = ensureRegistry(baseRefList, 'hh:charProperties', baseHeaderDoc);
+  const incomingCharPrItems = els(ensureRegistry(incomingRefList, 'hh:charProperties', incomingHeaderDoc), 'hh:charPr');
   const charPrIdMap = mergeSimpleRegistry(baseCharProps, incomingCharPrItems, 'hh:charPr', baseHeaderDoc);
   {
     const newIds = new Set(charPrIdMap.values());
@@ -468,12 +483,12 @@ function mergeOneDocument(baseHeaderDoc, incomingHeaderDoc, incomingSectionDocs)
     });
   }
 
-  const baseTabProps = els(baseRefList, 'hh:tabProperties')[0];
-  const incomingTabPrItems = els(els(incomingRefList, 'hh:tabProperties')[0], 'hh:tabPr');
+  const baseTabProps = ensureRegistry(baseRefList, 'hh:tabProperties', baseHeaderDoc);
+  const incomingTabPrItems = els(ensureRegistry(incomingRefList, 'hh:tabProperties', incomingHeaderDoc), 'hh:tabPr');
   const tabPrIdMap = mergeSimpleRegistry(baseTabProps, incomingTabPrItems, 'hh:tabPr', baseHeaderDoc);
 
-  const baseNumberingsEl = els(baseRefList, 'hh:numberings')[0];
-  const incomingNumberingItems = els(els(incomingRefList, 'hh:numberings')[0], 'hh:numbering');
+  const baseNumberingsEl = ensureRegistry(baseRefList, 'hh:numberings', baseHeaderDoc);
+  const incomingNumberingItems = els(ensureRegistry(incomingRefList, 'hh:numberings', incomingHeaderDoc), 'hh:numbering');
   const numberingIdMap = mergeSimpleRegistry(baseNumberingsEl, incomingNumberingItems, 'hh:numbering', baseHeaderDoc);
   {
     const newIds = new Set(numberingIdMap.values());
@@ -481,14 +496,12 @@ function mergeOneDocument(baseHeaderDoc, incomingHeaderDoc, incomingSectionDocs)
   }
 
   let bulletIdMap = new Map();
-  const baseBulletsEl = els(baseRefList, 'hh:bullets')[0];
-  const incomingBulletsEl = els(incomingRefList, 'hh:bullets')[0];
-  if (baseBulletsEl && incomingBulletsEl) {
-    bulletIdMap = mergeSimpleRegistry(baseBulletsEl, els(incomingBulletsEl, 'hh:bullet'), 'hh:bullet', baseHeaderDoc);
-  }
+  const baseBulletsEl = ensureRegistry(baseRefList, 'hh:bullets', baseHeaderDoc);
+  const incomingBulletsEl = ensureRegistry(incomingRefList, 'hh:bullets', incomingHeaderDoc);
+  bulletIdMap = mergeSimpleRegistry(baseBulletsEl, els(incomingBulletsEl, 'hh:bullet'), 'hh:bullet', baseHeaderDoc);
 
-  const baseParaProps = els(baseRefList, 'hh:paraProperties')[0];
-  const incomingParaPrItems = els(els(incomingRefList, 'hh:paraProperties')[0], 'hh:paraPr');
+  const baseParaProps = ensureRegistry(baseRefList, 'hh:paraProperties', baseHeaderDoc);
+  const incomingParaPrItems = els(ensureRegistry(incomingRefList, 'hh:paraProperties', incomingHeaderDoc), 'hh:paraPr');
   const paraPrIdMap = mergeSimpleRegistry(baseParaProps, incomingParaPrItems, 'hh:paraPr', baseHeaderDoc);
   {
     const newIds = new Set(paraPrIdMap.values());
@@ -504,8 +517,8 @@ function mergeOneDocument(baseHeaderDoc, incomingHeaderDoc, incomingSectionDocs)
     });
   }
 
-  const baseStylesEl = els(baseRefList, 'hh:styles')[0];
-  const incomingStyleItems = els(els(incomingRefList, 'hh:styles')[0], 'hh:style');
+  const baseStylesEl = ensureRegistry(baseRefList, 'hh:styles', baseHeaderDoc);
+  const incomingStyleItems = els(ensureRegistry(incomingRefList, 'hh:styles', incomingHeaderDoc), 'hh:style');
   const styleIdMap = mergeSimpleRegistry(baseStylesEl, incomingStyleItems, 'hh:style', baseHeaderDoc);
   {
     const newIds = new Set(styleIdMap.values());
