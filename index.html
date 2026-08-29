@@ -682,6 +682,29 @@ function foldRowsIntoBase(baseRows, newRows) {
   return ops.map(op => (op.type === 'a' ? baseRows[op.idx] : newRows[op.idx]));
 }
 
+// 행을 재배치/추가한 뒤에는 표 내부의 좌표·개수·크기 정보도 새 상태에 맞게
+// 다시 계산해줘야 한글 프로그램에서 칸이 겹치거나 어긋나지 않는다.
+// - 각 셀의 hp:cellAddr rowAddr: 그 셀이 위치한 새 행 번호로 갱신
+// - hp:tbl의 rowCnt: 실제 행 개수로 갱신
+// - hp:tbl의 hp:sz height: 각 행 높이(그 행 첫 번째 셀의 cellSz height)를 모두 더한 값으로 갱신
+function normalizeTableAfterRowMerge(baseTbl, mergedRows) {
+  let totalHeight = 0;
+  mergedRows.forEach(({ trEl }, newRowIdx) => {
+    const tcs = els(trEl, 'hp:tc');
+    tcs.forEach(tc => {
+      const cellAddr = els(tc, 'hp:cellAddr')[0];
+      if (cellAddr) cellAddr.setAttribute('rowAddr', String(newRowIdx));
+    });
+    const firstCellSz = tcs.length > 0 ? els(tcs[0], 'hp:cellSz')[0] : null;
+    if (firstCellSz) totalHeight += parseInt(firstCellSz.getAttribute('height'), 10) || 0;
+  });
+
+  baseTbl.setAttribute('rowCnt', String(mergedRows.length));
+
+  const szEl = els(baseTbl, 'hp:sz')[0];
+  if (szEl && totalHeight > 0) szEl.setAttribute('height', String(totalHeight));
+}
+
 async function mergeHwpxFilesAsTable(fileEntries) {
   if (!fileEntries || fileEntries.length === 0) throw new Error('NO_FILES');
   const zips = [];
@@ -761,10 +784,12 @@ async function mergeHwpxFilesAsTable(fileEntries) {
 
     const baseSectionDoc = baseTbl.ownerDocument;
     els(baseTbl, 'hp:tr').forEach(tr => baseTbl.removeChild(tr));
-    mergedRows.forEach(({ trEl }) => {
+    const insertedRows = mergedRows.map(({ trEl }) => {
       const node = (trEl.ownerDocument === baseSectionDoc) ? trEl : baseSectionDoc.importNode(trEl, true);
       baseTbl.appendChild(node);
+      return { trEl: node }; // 실제로 문서에 들어간 노드(복사본일 수 있음)를 기준으로 좌표를 갱신해야 함
     });
+    normalizeTableAfterRowMerge(baseTbl, insertedRows);
   });
 
   els(baseHeaderDoc, 'hh:head')[0].setAttribute('secCnt', String(base.sectionHrefs.length));
