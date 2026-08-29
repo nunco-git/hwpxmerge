@@ -151,6 +151,19 @@
   .hwpx-preview-table td p { margin: 0; }
   .preview-placeholder { text-align: center; color: #94a3b8; margin-top: 80px; font-size: 0.85rem; }
 
+  .merge-mode-toggle {
+    margin-top: 16px;
+    background: #fdf4ff;
+    border: 1px solid #f0abfc;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    color: #86198f;
+    line-height: 1.5;
+  }
+  .merge-mode-toggle label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+  .merge-mode-toggle input[type="checkbox"] { margin-top: 2px; flex-shrink: 0; width: 15px; height: 15px; accent-color: #a21caf; }
+
   .merge-btn { width: 100%; padding: 16px; background: #10b981; color: white; border: none; border-radius: 10px; font-size: 1.05rem; font-weight: 700; cursor: pointer; margin-top: 20px; }
   .merge-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
   .merge-btn.working { background: #64748b; cursor: wait; }
@@ -261,6 +274,12 @@
     </div>
   </div>
 
+  <div class="merge-mode-toggle">
+    <label>
+      <input type="checkbox" id="template-mode-checkbox" />
+      🧾 같은 표 양식(체크리스트·감사자료·보고서 등) 파일들을 병합합니다 — 문서 안에 표가 여러 개 이어져도 같은 위치의 표끼리 짝지어, 목차/항목명처럼 모든 파일에 동일한 내용은 한 번만 남기고 값이 다른 행만 모아 취합
+    </label>
+  </div>
   <button class="merge-btn" id="merge-btn" disabled onclick="mergeAndDownload()">선택한 순서대로 하나로 병합하여 다운로드</button>
   <div id="status" style="margin-top: 14px; text-align: center; font-size: 0.9rem; font-weight: 600;"></div>
   </div>
@@ -579,6 +598,144 @@ async function mergeHwpxFiles(fileEntries) {
   }
 
   els(baseHeaderDoc, 'hh:head')[0].setAttribute('secCnt', String(sectionCounter));
+  outputFiles['Contents/header.xml'] = serializeXml(baseHeaderDoc);
+  outputFiles['Contents/content.hpf'] = serializeXml(baseHpfDoc);
+
+  const passthroughPaths = ['mimetype', 'version.xml', 'settings.xml', 'META-INF/container.xml', 'META-INF/container.rdf', 'META-INF/manifest.xml'];
+  for (const p of passthroughPaths) {
+    const f = zips[0].file(p);
+    if (f) outputFiles[p] = await f.async('string');
+  }
+
+  const outZip = new JSZip();
+  if (outputFiles['mimetype'] != null) {
+    outZip.file('mimetype', outputFiles['mimetype'], { compression: 'STORE', createFolders: false });
+    delete outputFiles['mimetype'];
+  }
+  for (const [path, content] of Object.entries(outputFiles)) outZip.file(path, content, { createFolders: false, compression: 'DEFLATE' });
+  for (const [path, content] of Object.entries(outputBinary)) outZip.file(path, content, { createFolders: false, compression: 'DEFLATE' });
+  return outZip;
+}
+
+/* =========================================================================
+ * "서식 통합 병합" 모드 — 같은 표 양식(체크리스트/감사자료/보고서 등)에
+ * 값만 다르게 채운 hwpx 파일들을 전제로 한다. 새 페이지로 이어붙이는 대신,
+ * 첫 번째 파일을 기준 문서로 삼아 문서 안의 표를 순서대로 서로 대응시키고
+ * (감사자료처럼 항목별 표가 페이지에 걸쳐 여러 개 이어지는 경우도 각 표를
+ * 같은 위치끼리 짝지어 처리), 표마다 모든 파일에서 완전히 동일한 행(제목/
+ * 항목명 등 목차성 행)은 한 번만 남기고, 파일마다 내용이 다른 행(실제
+ * 입력값)만 파일 순서대로 모아 이어붙인다.
+ *
+ * 판단 기준: 행(hp:tr) 안의 모든 텍스트를 이어붙인 뒤, 같은 표의 같은 행
+ * 번호에서 그 값이 모든 파일에 걸쳐 완전히 동일하면 "목차 행", 하나라도
+ * 다르면 "입력값 행"으로 간주한다. 표 안에 라벨 열과 값 열이 함께 있는
+ * 행이라도, 값이 파일마다 다르면 안전하게 그 행 전체를 각 파일별로
+ * 보존한다 (일부 열만 다르다는 이유로 라벨을 지우면 데이터 유실 위험이
+ * 있기 때문). 문서 안 표의 개수와 순서는 모든 파일에서 동일해야 하며,
+ * 표 사이에 있는 일반 문단(설명글 등)은 기준 문서(첫 파일) 것을 그대로
+ * 사용한다.
+ * ========================================================================= */
+async function mergeHwpxFilesAsTable(fileEntries) {
+  if (!fileEntries || fileEntries.length === 0) throw new Error('NO_FILES');
+  const zips = [];
+  for (const f of fileEntries) zips.push(await JSZip.loadAsync(f.arrayBuffer));
+
+  async function readXml(zip, path) {
+    const file = zip.file(path);
+    if (!file) return null;
+    return parseXml(await file.async('string'));
+  }
+  async function getSpineSectionHrefs(zip) {
+    const hpfDoc = await readXml(zip, 'Contents/content.hpf');
+    const itemById = {};
+    els(hpfDoc, 'opf:item').forEach(it => { itemById[it.getAttribute('id')] = it.getAttribute('href'); });
+    const hrefs = [];
+    els(hpfDoc, 'opf:itemref').forEach(ir => {
+      const href = itemById[ir.getAttribute('idref')];
+      if (href && /Contents\/section\d+\.xml$/.test(href)) hrefs.push(href);
+    });
+    return hrefs;
+  }
+  async function loadAllTables(zip, fileLabel) {
+    const headerDoc = await readXml(zip, 'Contents/header.xml');
+    const sectionHrefs = await getSpineSectionHrefs(zip);
+    if (sectionHrefs.length === 0) throw new Error(`"${fileLabel}" 파일에서 본문을 찾을 수 없습니다.`);
+    const sectionDocs = [];
+    for (const href of sectionHrefs) sectionDocs.push(await readXml(zip, href));
+    const tables = [];
+    sectionDocs.forEach(sectionDoc => { els(sectionDoc, 'hp:tbl').forEach(tbl => tables.push(tbl)); });
+    if (tables.length === 0) throw new Error(`"${fileLabel}" 파일에 표가 없습니다. 서식 통합 병합은 표가 있는 문서에서만 가능합니다.`);
+    return { headerDoc, sectionHrefs, sectionDocs, tables };
+  }
+  function getRowText(trEl) {
+    return els(trEl, 'hp:t').map(t => (t.textContent || '').trim()).join('|');
+  }
+
+  const baseHpfDoc = await readXml(zips[0], 'Contents/content.hpf');
+  const base = await loadAllTables(zips[0], fileEntries[0].name);
+  const baseHeaderDoc = base.headerDoc;
+  const baseTables = base.tables;
+
+  const outputBinary = {};
+  for (const bf of zips[0].file(/^BinData\//)) outputBinary[bf.name] = await bf.async('uint8array');
+
+  // perTableFileRows[tableIdx][fileIdx] = [{trEl, text}, ...]
+  const perTableFileRows = baseTables.map(tbl => [els(tbl, 'hp:tr').map(tr => ({ trEl: tr, text: getRowText(tr) }))]);
+
+  for (let i = 1; i < zips.length; i++) {
+    const zip = zips[i];
+    const incoming = await loadAllTables(zip, fileEntries[i].name);
+
+    if (incoming.tables.length !== baseTables.length) {
+      throw new Error(`"${fileEntries[i].name}" 파일의 표 개수(${incoming.tables.length}개)가 기준 파일(${baseTables.length}개)과 다릅니다. 모든 파일의 표 개수와 순서가 같아야 합니다.`);
+    }
+
+    // 서식(폰트/테두리/글자모양 등) 레지스트리를 기준 문서에 병합하고, 해당 파일의
+    // 섹션 안 참조 ID들을 기준 문서 쪽 ID로 다시 씀 (기존 새페이지 병합과 동일 로직 재사용)
+    mergeOneDocument(baseHeaderDoc, incoming.headerDoc, incoming.sectionDocs);
+
+    for (const bf of zip.file(/^BinData\//)) {
+      let newName = bf.name;
+      if (outputBinary[newName]) newName = bf.name.replace('BinData/', `BinData/f${i}_`);
+      outputBinary[newName] = await bf.async('uint8array');
+    }
+
+    incoming.tables.forEach((tbl, tableIdx) => {
+      perTableFileRows[tableIdx].push(els(tbl, 'hp:tr').map(tr => ({ trEl: tr, text: getRowText(tr) })));
+    });
+  }
+
+  baseTables.forEach((baseTbl, tableIdx) => {
+    const perFileRows = perTableFileRows[tableIdx];
+    const minRowCount = Math.min(...perFileRows.map(r => r.length));
+    const finalRows = [];
+
+    for (let rowIdx = 0; rowIdx < minRowCount; rowIdx++) {
+      const texts = perFileRows.map(rows => rows[rowIdx].text);
+      const allSame = texts.every(t => t === texts[0]);
+      if (allSame) {
+        finalRows.push(perFileRows[0][rowIdx].trEl); // 목차/서식 행: 한 번만
+      } else {
+        perFileRows.forEach(rows => finalRows.push(rows[rowIdx].trEl)); // 입력값 행: 파일마다 보존
+      }
+    }
+    // 표 길이가 파일마다 다르면, 넘치는 나머지 행도 전부 데이터로 간주해 보존
+    perFileRows.forEach(rows => {
+      for (let rowIdx = minRowCount; rowIdx < rows.length; rowIdx++) finalRows.push(rows[rowIdx].trEl);
+    });
+
+    const baseSectionDoc = baseTbl.ownerDocument;
+    els(baseTbl, 'hp:tr').forEach(tr => baseTbl.removeChild(tr));
+    finalRows.forEach(trEl => {
+      const node = (trEl.ownerDocument === baseSectionDoc) ? trEl : baseSectionDoc.importNode(trEl, true);
+      baseTbl.appendChild(node);
+    });
+  });
+
+  els(baseHeaderDoc, 'hh:head')[0].setAttribute('secCnt', String(base.sectionHrefs.length));
+
+  const outputFiles = {};
+  base.sectionHrefs.forEach((href, idx) => { outputFiles[href] = serializeXml(base.sectionDocs[idx]); });
   outputFiles['Contents/header.xml'] = serializeXml(baseHeaderDoc);
   outputFiles['Contents/content.hpf'] = serializeXml(baseHpfDoc);
 
@@ -1058,6 +1215,9 @@ async function mergeAndDownload() {
   const readyFiles = fileDataList.filter(i => i.ok);
   if (readyFiles.length < 1) return;
 
+  const templateModeEl = document.getElementById('template-mode-checkbox');
+  const useTemplateMode = !!(templateModeEl && templateModeEl.checked);
+
   mergeBtn.disabled = true;
   mergeBtn.classList.add('working');
   mergeBtn.textContent = '병합 중...';
@@ -1068,17 +1228,21 @@ async function mergeAndDownload() {
     for (const item of readyFiles) {
       fileEntries.push({ name: item.file.name, arrayBuffer: await item.file.arrayBuffer() });
     }
-    const outZip = await mergeHwpxFiles(fileEntries);
+    const outZip = useTemplateMode
+      ? await mergeHwpxFilesAsTable(fileEntries)
+      : await mergeHwpxFiles(fileEntries);
     const blob = await outZip.generateAsync({ type: 'blob', mimeType: 'application/hwp+zip' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = '한글_통합_결과.hwpx';
+    a.download = useTemplateMode ? '한글_서식통합_결과.hwpx' : '한글_통합_결과.hwpx';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    statusEl.textContent = `✅ ${readyFiles.length}개 문서를 성공적으로 병합했습니다.`;
+    statusEl.textContent = useTemplateMode
+      ? `✅ ${readyFiles.length}개 문서에서 중복 항목을 제외하고 값만 취합했습니다.`
+      : `✅ ${readyFiles.length}개 문서를 성공적으로 병합했습니다.`;
     statusEl.style.color = '#166534';
   } catch (err) {
     console.error(err);
