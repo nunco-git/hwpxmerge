@@ -648,6 +648,40 @@ async function mergeHwpxFiles(fileEntries) {
  * 표 사이에 있는 일반 문단(설명글 등)은 기준 문서(첫 파일) 것을 그대로
  * 사용한다.
  * ========================================================================= */
+// 두 행 목록(a, b)을 텍스트 기준으로 정렬해 병합한다. 단순히 같은 줄 번호끼리
+// 비교하면 중간에 행이 하나만 끼어 있어도 그 뒤 전체가 밀려서 잘못 비교되므로,
+// 문서 비교(diff)에 쓰이는 최장 공통 부분열(LCS) 알고리즘으로 순서를 어긋나지
+// 않게 정렬한다. a에만 있거나 공통인 행은 그대로 두고, b에만 있는(=새로 추가된)
+// 행을 정확한 위치에 끼워 넣는 방식.
+function lcsAlignRows(a, b) {
+  const n = a.length, m = b.length;
+  const dp = [];
+  for (let i = 0; i <= n; i++) dp.push(new Array(m + 1).fill(0));
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      dp[i][j] = (a[i - 1].text === b[j - 1].text)
+        ? dp[i - 1][j - 1] + 1
+        : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  const ops = [];
+  let i = n, j = m;
+  while (i > 0 && j > 0) {
+    if (a[i - 1].text === b[j - 1].text) { ops.push({ type: 'a', idx: i - 1 }); i--; j--; }
+    else if (dp[i - 1][j] >= dp[i][j - 1]) { ops.push({ type: 'a', idx: i - 1 }); i--; }
+    else { ops.push({ type: 'b', idx: j - 1 }); j--; }
+  }
+  while (i > 0) { ops.push({ type: 'a', idx: i - 1 }); i--; }
+  while (j > 0) { ops.push({ type: 'b', idx: j - 1 }); j--; }
+  ops.reverse();
+  return ops;
+}
+
+function foldRowsIntoBase(baseRows, newRows) {
+  const ops = lcsAlignRows(baseRows, newRows);
+  return ops.map(op => (op.type === 'a' ? baseRows[op.idx] : newRows[op.idx]));
+}
+
 async function mergeHwpxFilesAsTable(fileEntries) {
   if (!fileEntries || fileEntries.length === 0) throw new Error('NO_FILES');
   const zips = [];
@@ -720,26 +754,14 @@ async function mergeHwpxFilesAsTable(fileEntries) {
 
   baseTables.forEach((baseTbl, tableIdx) => {
     const perFileRows = perTableFileRows[tableIdx];
-    const minRowCount = Math.min(...perFileRows.map(r => r.length));
-    const finalRows = [];
-
-    for (let rowIdx = 0; rowIdx < minRowCount; rowIdx++) {
-      const texts = perFileRows.map(rows => rows[rowIdx].text);
-      const allSame = texts.every(t => t === texts[0]);
-      if (allSame) {
-        finalRows.push(perFileRows[0][rowIdx].trEl); // 목차/서식 행: 한 번만
-      } else {
-        perFileRows.forEach(rows => finalRows.push(rows[rowIdx].trEl)); // 입력값 행: 파일마다 보존
-      }
+    let mergedRows = perFileRows[0]; // 첫 파일의 행에서 시작
+    for (let f = 1; f < perFileRows.length; f++) {
+      mergedRows = foldRowsIntoBase(mergedRows, perFileRows[f]);
     }
-    // 표 길이가 파일마다 다르면, 넘치는 나머지 행도 전부 데이터로 간주해 보존
-    perFileRows.forEach(rows => {
-      for (let rowIdx = minRowCount; rowIdx < rows.length; rowIdx++) finalRows.push(rows[rowIdx].trEl);
-    });
 
     const baseSectionDoc = baseTbl.ownerDocument;
     els(baseTbl, 'hp:tr').forEach(tr => baseTbl.removeChild(tr));
-    finalRows.forEach(trEl => {
+    mergedRows.forEach(({ trEl }) => {
       const node = (trEl.ownerDocument === baseSectionDoc) ? trEl : baseSectionDoc.importNode(trEl, true);
       baseTbl.appendChild(node);
     });
